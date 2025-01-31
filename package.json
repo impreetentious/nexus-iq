@@ -1,0 +1,31 @@
+{
+  "name": "nexus-iq",
+  "version": "0.2.0",
+  "description": "Nexus IQ – qualitative text measurement platform built with Next.js.",
+  "type": "module",
+  "private": false,
+  "engines": {
+    "node": ">=20.10"
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run next:dev\" \"npm run server\"",
+    "next:dev": "next dev",
+    "next:build": "next build",
+    "next:start": "next start",
+    "build": "npm run next:build",
+    "start": "concurrently \"npm run next:start\" \"npm run server\""
+  },
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "concurrently": "^8.0.1",
+    "fflate": "^0.8.2",
+    "lint": "^1.1.2",
+    "mammoth": "^1.8.0",
+    "next": "14.2.23",
+    "pdfjs-dist": "^4.10.38",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.7.3",
+    "xlsx": "^0.18.5"
+  }
+}
