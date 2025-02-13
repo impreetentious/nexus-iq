@@ -89,7 +89,7 @@ const DIRECTOR_PAUSE_CODES = new Set(["PROVIDER_UNREACHABLE", "PROVIDER_HTTP", "
 // Quarantine entries carry their reasons: {unitId, code, message} (message
 // trimmed to ≤200 chars). A researcher staring at an empty preview or a
 // shrunken run must see WHY units vanished — a bare id list told them
-// nothing (field bug: mass TRUNCATED quarantines read as "empty
+// nothing (February 2025 field bug: mass TRUNCATED quarantines read as "empty
 // results"). Older run records persisted bare unitId strings; readers
 // normalize on load (string → {unitId, code: null, message: null}) so legacy
 // run.json / project.runs[] keep working. Dedupe is by unitId, first entry
