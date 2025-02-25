@@ -1,0 +1,56 @@
+{
+  "id": "brief_a1",
+  "corpusId": "corp_exit2025",
+  "createdAt": "2026-06-01T09:32:00Z",
+  "authoredBy": "director",
+  "humanTouched": false,
+  "textColumn": "response",
+  "metaColumns": 6,
+  "unitOfAnalysis": "One exit-survey response per row (one respondent each).",
+  "paragraphs": [
+    {
+      "md": "This corpus is 2,500 exit-survey open-ends from a single employer, written between January and December 2025. The voice is unusually candid for HR data — respondents are already gone, and it shows. Most answers are short and pointed (median 19 words), but a quarter run past 50 words and read as carefully composed parting statements. About 3% are written in Spanish, concentrated in LATAM-region Sales and Support; junk placeholders and duplicates are already queued out of analysis.",
+      "refs": ["u_2847f1a09c3d55b2", "u_91b3c07d2e8f4a16", "u_84d5f1b7e0c3a926"]
+    },
+    {
+      "md": "**Pay is the loudest theme, and it is specific.** People rarely say \"underpaid\" in the abstract — they cite percentages against market, frozen comp cycles, band compression against new hires, and capped commission accelerators. The pay complaints cluster in Sales and Support and travel with low satisfaction scores. A telling pattern: several respondents say the pay was *fine* and then name something else, which makes uncritical keyword counting risky here.",
+      "refs": ["u_03d7e8a1f4b2c690", "u_d12f4a86c3e09b58", "u_3e8c5d0f7a92b441", "u_2847f1a09c3d55b2"]
+    },
+    {
+      "md": "**Management complaints are about churn and absence, not cruelty.** The recurring figure is the missing manager: four reorgs in eighteen months, two managers in a year, a skip-level who never learned a name, a beloved manager who left and took the org's clarity with her. This theme concentrates in Operations and Marketing and reads as a structural account rather than personal grievance.",
+      "refs": ["u_c6a91e2f7d40b833", "u_c45d8e1a9f30b672", "u_0b6f9a2d8c45e317", "u_7e50b3d9a2c4f181"]
+    },
+    {
+      "md": "**Workload and burnout form the most somatically vivid theme** — on-call rotations counted at the doctor's office, laptops on vacation, \"nothing left to give.\" It skews toward Engineering and toward tenures under three years, and it is the theme most often wrapped in sarcasm (\"eighty-hour weeks build character\"), which a dictionary will misread and a judge must be tested on.",
+      "refs": ["u_1f8d3c5b9e72a044", "u_b3c1f5d8a07e2964", "u_9a4e7b1c2f86d520", "u_8800c1d2e4a90b77"]
+    },
+    {
+      "md": "**Two quieter themes are worth instruments of their own.** Blocked growth — promised promotions, external hires over internal candidates, development plans that never materialize — appears at moderate frequency but with high intensity. Remote-policy anger is newer, dated to the return-to-office mandate, and is the only theme with a sharp regional skew: LATAM respondents note the mandate assumed an office that does not exist in their country.",
+      "refs": ["u_55e0a9d4b7c2f311", "u_16d9a4e7f2c50b38", "u_a8f04c6e3b92d715", "u_30e6c2f8b9a4d157"]
+    }
+  ],
+  "themes": [
+    { "name": "Pay & compensation", "definition": "The response treats pay, salary, equity, or comp process as a decisive grievance.", "quoteRefs": ["u_03d7e8a1f4b2c690", "u_d12f4a86c3e09b58", "u_3e8c5d0f7a92b441"] },
+    { "name": "Workload & burnout", "definition": "The response describes unsustainable workload, hours, on-call, or exhaustion as decisive.", "quoteRefs": ["u_1f8d3c5b9e72a044", "u_9a4e7b1c2f86d520", "u_b3c1f5d8a07e2964"] },
+    { "name": "Management churn", "definition": "The response faults manager quality, reorgs, or leadership absence.", "quoteRefs": ["u_c6a91e2f7d40b833", "u_7e50b3d9a2c4f181", "u_0b6f9a2d8c45e317"] },
+    { "name": "Blocked growth", "definition": "The response cites missing promotion, development, or career path.", "quoteRefs": ["u_55e0a9d4b7c2f311", "u_16d9a4e7f2c50b38", "u_e73a1d49c8b5f026"] },
+    { "name": "Remote policy", "definition": "The response objects to the RTO mandate or lost location flexibility.", "quoteRefs": ["u_a8f04c6e3b92d715", "u_6c1e5a9d4f28b073", "u_30e6c2f8b9a4d157"] }
+  ],
+  "redFlags": [
+    { "kind": "sarcasm", "detail": "Sarcasm and mixed valence are common in low-satisfaction rows; sentiment lexicons will misread them.", "refs": ["u_8800c1d2e4a90b77", "u_d94a7c1e5b28f063"] },
+    { "kind": "duplicates", "detail": "24 exact duplicates suggest a survey-channel echo; they are flagged, not dropped.", "refs": ["u_4b9c2e7d80a1f355", "u_58b0c7f3e6a14d92"] },
+    { "kind": "pii", "detail": "Some responses name individuals; pseudonymization is reversible and vaulted outside the bundle.", "refs": ["u_55e0a9d4b7c2f311"] }
+  ],
+  "suggestedQuestions": [
+    "Which departments complain most about pay?",
+    "Do people who complain about pay also mention quitting?"
+  ],
+  "sample": {
+    "n": 312,
+    "design": "length-terciles × meta cells",
+    "strataColumn": "dept",
+    "strata": 18,
+    "unitIds": ["u_2847f1a09c3d55b2", "u_91b3c07d2e8f4a16", "u_55e0a9d4b7c2f311", "u_8800c1d2e4a90b77", "u_03d7e8a1f4b2c690"]
+  },
+  "issues": { "invalidRefs": 0 }
+}

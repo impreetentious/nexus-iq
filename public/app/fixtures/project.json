@@ -1,0 +1,48 @@
+{
+  "id": "proj_techcorp01",
+  "name": "TechCorp Exit Survey",
+  "slug": "techcorp-exit",
+  "createdAt": "2026-06-01T09:14:00Z",
+  "privacyMode": "no-training",
+  "budget": { "capUSD": 25, "spentUSD": 4.87 },
+  "director": { "provider": "anthropic", "model": "claude-3-sonnet", "snapshot": "claude-3-sonnet-20240229" },
+  "corpora": [
+    {
+      "id": "corp_exit2025",
+      "name": "techcorp-exit-survey.csv",
+      "source": { "filename": "techcorp-exit-survey.csv", "format": "csv", "rows": 2500 },
+      "unitization": { "scheme": "response", "textColumn": "response" },
+      "unitCount": 2500,
+      "createdAt": "2026-06-01T09:21:00Z",
+      "textColumn": "response",
+      "scheme": "response",
+      "junk": { "na": 38, "short": 16, "dup": 24, "bot": 7 },
+      "metaColumns": 6,
+      "sourceName": "techcorp-exit-survey.csv"
+    },
+    {
+      "id": "corp_exit2025_mgrnote",
+      "name": "techcorp-exit-survey.csv · text=manager_note",
+      "source": { "filename": "techcorp-exit-survey.csv", "format": "csv", "rows": 2500 },
+      "unitization": { "scheme": "response", "textColumn": "manager_note" },
+      "unitCount": 2294,
+      "createdAt": "2026-06-02T14:05:00Z",
+      "textColumn": "manager_note",
+      "scheme": "response",
+      "junk": { "na": 11, "short": 41, "dup": 6, "bot": 0 },
+      "metaColumns": 6,
+      "sourceName": "techcorp-exit-survey.csv",
+      "derivedFrom": "corp_exit2025"
+    }
+  ],
+  "analyses": [
+    { "id": "an_crosstab", "kind": "crosstab", "level": "corrected", "createdAt": "2026-06-04T16:40:00Z" },
+    { "id": "an_triang", "kind": "triangulation", "level": "exploratory", "createdAt": "2026-06-04T17:02:00Z" },
+    { "id": "an_subgroup", "kind": "subgroup", "level": "corrected", "createdAt": "2026-06-04T17:15:00Z" },
+    { "id": "an_model", "kind": "model", "level": "corrected", "createdAt": "2026-06-04T18:03:00Z" }
+  ],
+  "briefs": [
+    { "id": "brief_a1", "corpusId": "corp_exit2025", "createdAt": "2026-06-01T09:32:00Z", "authoredBy": "director", "paragraphs": 5, "themes": 5 }
+  ],
+  "plans": []
+}

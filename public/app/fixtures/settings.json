@@ -1,0 +1,8 @@
+{
+  "keys": {
+    "anthropic": { "configured": false },
+    "openai": { "configured": false },
+    "ollama": { "configured": true, "baseUrl": "" }
+  },
+  "port": 7341
+}

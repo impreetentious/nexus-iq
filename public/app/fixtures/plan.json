@@ -1,0 +1,66 @@
+{
+  "planId": "plan_q1",
+  "plan": {
+    "planId": "plan_q1",
+    "question": "Do people who complain about pay actually intend to quit, or are they negotiating?",
+    "corpusId": "corp_exit2025",
+    "createdAt": "2026-06-04T18:30:00Z",
+    "status": "proposed",
+    "constructs": [
+      {
+        "id": "c_fxpaygriev",
+        "name": "Pay grievance",
+        "type": "binary",
+        "definition": "Whether the respondent treats compensation as a decisive grievance (not merely mentioned).",
+        "criteria": { "include": ["explicit complaint about pay level, raises, or fairness framed as decisive"], "exclude": ["pay mentioned only to be dismissed"] },
+        "edgeCases": ["sarcastic praise of pay counts as a complaint"],
+        "examples": [{ "text": "the pay was simply too low for the work", "label": "yes", "kind": "positive" }],
+        "categories": [{ "value": "yes", "label": "Yes" }, { "value": "no", "label": "No" }],
+        "authoredBy": "director",
+        "humanTouched": false,
+        "createdAt": "2026-06-04T18:30:00Z"
+      },
+      {
+        "id": "c_fxquitint",
+        "name": "Quit-intent framing",
+        "type": "binary",
+        "definition": "Whether the respondent uses explicit quitting / had-to-leave language.",
+        "criteria": { "include": ["first-person quitting or resignation language"], "exclude": ["hypothetical talk about others quitting"] },
+        "edgeCases": [],
+        "examples": [{ "text": "I had to get out before it got worse", "label": "quit", "kind": "positive" }],
+        "categories": [{ "value": "quit", "label": "Quit language" }, { "value": "stay", "label": "None" }],
+        "authoredBy": "director",
+        "humanTouched": false,
+        "createdAt": "2026-06-04T18:30:00Z"
+      }
+    ],
+    "instruments": [
+      { "constructId": "c_fxpaygriev", "constructName": "Pay grievance", "workerClass": "small", "provider": "anthropic", "model": "claude-3-5-haiku", "snapshot": "claude-3-5-haiku-20241022" },
+      { "constructId": "c_fxquitint", "constructName": "Quit-intent framing", "workerClass": "small", "provider": "anthropic", "model": "claude-3-5-haiku", "snapshot": "claude-3-5-haiku-20241022" }
+    ],
+    "estimate": {
+      "usd": 2.96,
+      "etaMin": 78,
+      "calls": 5000,
+      "inputTokens": 3920000,
+      "outputTokens": 580000,
+      "perInstrument": [
+        { "constructId": "c_fxpaygriev", "model": "claude-3-5-haiku", "calls": 2500, "inputTokens": 1960000, "outputTokens": 290000, "estUSD": 1.48, "etaMinutes": 39 },
+        { "constructId": "c_fxquitint", "model": "claude-3-5-haiku", "calls": 2500, "inputTokens": 1960000, "outputTokens": 290000, "estUSD": 1.48, "etaMinutes": 39 }
+      ]
+    },
+    "analysis": {
+      "kind": "crosstab",
+      "spec": { "rowKey": "label", "colKey": "dept" },
+      "annotation": "Cross pay grievance against quit-intent framing by department to answer the question."
+    },
+    "authoredBy": "director",
+    "humanTouched": false
+  },
+  "approveResult": {
+    "planId": "plan_q1",
+    "constructIds": ["c_fxpaygriev", "c_fxquitint"],
+    "instrumentIds": ["inst_fxpaygriev_j", "inst_fxquitint_j"],
+    "runIds": ["run_fxpaygriev", "run_fxquitint"]
+  }
+}

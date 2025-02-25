@@ -1,0 +1,75 @@
+{
+  "local": true,
+  "unitCount": 2500,
+  "meanUnitChars": 150,
+  "lengthHist": {
+    "bins": [
+      { "lo": 0, "hi": 9, "n": 312 },
+      { "lo": 10, "hi": 19, "n": 696 },
+      { "lo": 20, "hi": 29, "n": 884 },
+      { "lo": 30, "hi": 39, "n": 488 },
+      { "lo": 40, "hi": 49, "n": 96 },
+      { "lo": 50, "hi": 59, "n": 24 }
+    ],
+    "unit": "words"
+  },
+  "langMix": { "en": 0.968, "es": 0.032, "other": 0 },
+  "topTerms": [
+    { "term": "pay", "count": 386 },
+    { "term": "manager", "count": 312 },
+    { "term": "salary", "count": 249 },
+    { "term": "office", "count": 233 },
+    { "term": "workload", "count": 194 },
+    { "term": "burnout", "count": 184 },
+    { "term": "management", "count": 168 },
+    { "term": "promotion", "count": 153 },
+    { "term": "quota", "count": 118 },
+    { "term": "leadership", "count": 116 },
+    { "term": "growth", "count": 104 },
+    { "term": "team", "count": 95 },
+    { "term": "commute", "count": 91 },
+    { "term": "mandate", "count": 86 },
+    { "term": "remote", "count": 78 },
+    { "term": "reorg", "count": 74 },
+    { "term": "hours", "count": 69 },
+    { "term": "career", "count": 64 },
+    { "term": "equity", "count": 58 },
+    { "term": "hybrid", "count": 49 }
+  ],
+  "sentimentSketch": {
+    "lexicon": "VADER",
+    "positive": 0.262,
+    "negative": 0.531,
+    "neutral": 0.207,
+    "meanValence": -0.41
+  },
+  "metaMarginals": [
+    { "column": "dept", "values": [
+      { "value": "Engineering", "n": 678 }, { "value": "Sales", "n": 562 },
+      { "value": "Operations", "n": 444 }, { "value": "Support", "n": 392 },
+      { "value": "Marketing", "n": 263 }, { "value": "People", "n": 161 }
+    ]},
+    { "column": "region", "values": [
+      { "value": "NA", "n": 1693 }, { "value": "EMEA", "n": 412 },
+      { "value": "APAC", "n": 247 }, { "value": "LATAM", "n": 148 }
+    ]},
+    { "column": "role_level", "values": [
+      { "value": "IC", "n": 1550 }, { "value": "Lead", "n": 400 },
+      { "value": "Manager", "n": 375 }, { "value": "Director", "n": 175 }
+    ]},
+    { "column": "satisfaction", "values": [
+      { "value": "1", "n": 405 }, { "value": "2", "n": 762 }, { "value": "3", "n": 633 },
+      { "value": "4", "n": 458 }, { "value": "5", "n": 242 }
+    ]}
+  ],
+  "briefEstimate": { "usd": 0.086667, "etaMin": 1 },
+  "scope": {
+    "textColumn": "response",
+    "scheme": "response",
+    "unitCount": 2500,
+    "junk": { "na": 38, "short": 16, "dup": 24, "bot": 7 },
+    "metaColumns": 6,
+    "derivedFrom": null
+  },
+  "computedAt": "2026-06-01T09:22:00.000Z"
+}

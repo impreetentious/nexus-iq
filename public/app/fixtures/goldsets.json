@@ -1,0 +1,221 @@
+{
+  "goldsets": [
+    {
+      "id": "g_theme1",
+      "constructId": "k_theme",
+      "tier": "gold",
+      "design": "srs",
+      "status": "adjudicating",
+      "corpusId": "corp_exit2025",
+      "populationN": 2500,
+      "createdAt": "2026-06-03T09:00:00Z",
+      "sample": [
+        { "unitId": "u_2847f1a09c3d55b2", "pi": 0.008 },
+        { "unitId": "u_91b3c07d2e8f4a16", "pi": 0.008 },
+        { "unitId": "u_55e0a9d4b7c2f311", "pi": 0.008 },
+        { "unitId": "u_8800c1d2e4a90b77", "pi": 0.008 },
+        { "unitId": "u_03d7e8a1f4b2c690", "pi": 0.008 },
+        { "unitId": "u_4b9c2e7d80a1f355", "pi": 0.008 },
+        { "unitId": "u_d12f4a86c3e09b58", "pi": 0.008 },
+        { "unitId": "u_7e50b3d9a2c4f181", "pi": 0.008 },
+        { "unitId": "u_c6a91e2f7d40b833", "pi": 0.008 },
+        { "unitId": "u_1f8d3c5b9e72a044", "pi": 0.008 },
+        { "unitId": "u_9a4e7b1c2f86d520", "pi": 0.008 },
+        { "unitId": "u_b05c8f2a6d31e947", "pi": 0.008 },
+        { "unitId": "u_e73a1d49c8b5f026", "pi": 0.008 },
+        { "unitId": "u_5d2b9e8f1a73c460", "pi": 0.008 },
+        { "unitId": "u_a8f04c6e3b92d715", "pi": 0.008 },
+        { "unitId": "u_6c1e5a9d4f28b073", "pi": 0.008 },
+        { "unitId": "u_f29b7d3a1c50e684", "pi": 0.008 },
+        { "unitId": "u_47a3e9c5d2f1b860", "pi": 0.008 },
+        { "unitId": "u_92c8b4f6a1e7d503", "pi": 0.008 },
+        { "unitId": "u_d94a7c1e5b28f063", "pi": 0.008 }
+      ],
+      "coders": [
+        {
+          "coderId": "pat",
+          "blind": true,
+          "startedAt": "2026-06-03T10:00:00Z",
+          "finishedAt": "2026-06-03T10:34:00Z",
+          "labels": {
+            "u_2847f1a09c3d55b2": "management",
+            "u_91b3c07d2e8f4a16": "pay",
+            "u_55e0a9d4b7c2f311": "growth",
+            "u_8800c1d2e4a90b77": "workload-burnout",
+            "u_03d7e8a1f4b2c690": "pay",
+            "u_4b9c2e7d80a1f355": "pay",
+            "u_d12f4a86c3e09b58": "pay",
+            "u_7e50b3d9a2c4f181": "management",
+            "u_c6a91e2f7d40b833": "management",
+            "u_1f8d3c5b9e72a044": "workload-burnout",
+            "u_9a4e7b1c2f86d520": "workload-burnout",
+            "u_b05c8f2a6d31e947": "workload-burnout",
+            "u_e73a1d49c8b5f026": "growth",
+            "u_5d2b9e8f1a73c460": "growth",
+            "u_a8f04c6e3b92d715": "remote-policy",
+            "u_6c1e5a9d4f28b073": "remote-policy",
+            "u_f29b7d3a1c50e684": "other",
+            "u_47a3e9c5d2f1b860": "other",
+            "u_92c8b4f6a1e7d503": "other",
+            "u_d94a7c1e5b28f063": "workload-burnout"
+          },
+          "memos": {
+            "u_2847f1a09c3d55b2": "Pay explicitly dismissed; the decisive clause is the manager exodus.",
+            "u_92c8b4f6a1e7d503": "Regret + late counter — comp-adjacent but the grievance is process timing. Going other; flagging."
+          },
+          "flagged": ["u_92c8b4f6a1e7d503"]
+        },
+        {
+          "coderId": "sam",
+          "blind": true,
+          "startedAt": "2026-06-03T11:00:00Z",
+          "finishedAt": null,
+          "labels": {
+            "u_2847f1a09c3d55b2": "workload-burnout",
+            "u_91b3c07d2e8f4a16": "pay",
+            "u_55e0a9d4b7c2f311": "growth",
+            "u_8800c1d2e4a90b77": "workload-burnout",
+            "u_03d7e8a1f4b2c690": "pay",
+            "u_4b9c2e7d80a1f355": "pay",
+            "u_d12f4a86c3e09b58": "pay",
+            "u_7e50b3d9a2c4f181": "management",
+            "u_c6a91e2f7d40b833": "management",
+            "u_1f8d3c5b9e72a044": "workload-burnout",
+            "u_9a4e7b1c2f86d520": "workload-burnout",
+            "u_b05c8f2a6d31e947": "management",
+            "u_e73a1d49c8b5f026": "growth",
+            "u_92c8b4f6a1e7d503": "pay"
+          },
+          "uncodable": ["u_a8f04c6e3b92d715", "u_47a3e9c5d2f1b860"],
+          "memos": {
+            "u_a8f04c6e3b92d715": "Two themes stated with equal weight and no decisive clause — can't pick one."
+          },
+          "flagged": []
+        }
+      ],
+      "humanAgreement": {
+        "n": 14,
+        "coders": ["pat", "sam"],
+        "percent": 0.786,
+        "kappa": 0.72,
+        "alpha": 0.71,
+        "ac1": 0.74,
+        "labels": ["growth", "management", "other", "pay", "workload-burnout"],
+        "confusion": [
+          [2, 0, 0, 0, 0],
+          [0, 2, 0, 0, 1],
+          [0, 0, 0, 1, 0],
+          [0, 0, 0, 5, 0],
+          [0, 1, 0, 0, 2]
+        ],
+        "uncodableUnits": 2,
+        "excludedFromAgreement": 2
+      },
+      "adjudicated": {
+        "u_2847f1a09c3d55b2": "management"
+      },
+      "excluded": {
+        "u_47a3e9c5d2f1b860": true
+      }
+    }
+  ],
+  "agreement": {
+    "g_theme1": {
+      "humanAgreement": {
+        "n": 14,
+        "coders": ["pat", "sam"],
+        "percent": 0.786,
+        "kappa": 0.72,
+        "alpha": 0.71,
+        "ac1": 0.74,
+        "labels": ["growth", "management", "other", "pay", "workload-burnout"],
+        "confusion": [
+          [2, 0, 0, 0, 0],
+          [0, 2, 0, 0, 1],
+          [0, 0, 0, 1, 0],
+          [0, 0, 0, 5, 0],
+          [0, 1, 0, 0, 2]
+        ],
+        "uncodableUnits": 2,
+        "excludedFromAgreement": 2
+      },
+      "perInstrument": [
+        {
+          "instrumentId": "inst_judge_f",
+          "name": "exit-theme · judge v4",
+          "kind": "judge",
+          "level": "calibrated",
+          "versionHash": "9f2e1d0c8b7a65445566778899aabbcc",
+          "agreement": {
+            "n": 18,
+            "coders": ["gold", "machine"],
+            "percent": 0.833,
+            "kappa": 0.79,
+            "alpha": 0.78,
+            "ac1": 0.81,
+            "ci": { "lo": 0.63, "hi": 0.92, "method": "bootstrap-percentile" },
+            "perClass": [
+              { "label": "pay", "precision": 1.0, "recall": 1.0, "f1": 1.0, "support": 4 },
+              { "label": "management", "precision": 0.67, "recall": 0.67, "f1": 0.67, "support": 3 },
+              { "label": "workload-burnout", "precision": 0.8, "recall": 0.8, "f1": 0.8, "support": 5 },
+              { "label": "growth", "precision": 1.0, "recall": 0.67, "f1": 0.8, "support": 3 },
+              { "label": "remote-policy", "precision": 1.0, "recall": 1.0, "f1": 1.0, "support": 2 },
+              { "label": "other", "precision": 0.5, "recall": 1.0, "f1": 0.67, "support": 1 }
+            ],
+            "labels": ["growth", "management", "other", "pay", "remote-policy", "workload-burnout"],
+            "confusion": [
+              [2, 0, 1, 0, 0, 0],
+              [0, 2, 0, 0, 0, 1],
+              [0, 0, 1, 0, 0, 0],
+              [0, 0, 0, 4, 0, 0],
+              [0, 0, 0, 0, 2, 0],
+              [0, 1, 0, 0, 0, 4]
+            ]
+          }
+        },
+        {
+          "instrumentId": "inst_judge_s",
+          "name": "exit-theme · judge v3 (tuned)",
+          "kind": "judge",
+          "level": "stabilized",
+          "versionHash": "3c52e9f1a8b7d604c5d6e7f80901a2b3",
+          "agreement": {
+            "n": 18,
+            "coders": ["gold", "machine"],
+            "percent": 0.778,
+            "kappa": 0.72,
+            "alpha": 0.71,
+            "ac1": 0.75,
+            "ci": { "lo": 0.54, "hi": 0.87, "method": "bootstrap-percentile" },
+            "perClass": [
+              { "label": "pay", "precision": 0.8, "recall": 1.0, "f1": 0.89, "support": 4 },
+              { "label": "management", "precision": 0.67, "recall": 0.67, "f1": 0.67, "support": 3 },
+              { "label": "workload-burnout", "precision": 0.8, "recall": 0.8, "f1": 0.8, "support": 5 },
+              { "label": "growth", "precision": 1.0, "recall": 0.33, "f1": 0.5, "support": 3 },
+              { "label": "remote-policy", "precision": 1.0, "recall": 1.0, "f1": 1.0, "support": 2 },
+              { "label": "other", "precision": 0.33, "recall": 1.0, "f1": 0.5, "support": 1 }
+            ],
+            "labels": ["growth", "management", "other", "pay", "remote-policy", "workload-burnout"],
+            "confusion": [
+              [1, 0, 1, 1, 0, 0],
+              [0, 2, 0, 0, 0, 1],
+              [0, 0, 1, 0, 0, 0],
+              [0, 0, 0, 4, 0, 0],
+              [0, 0, 0, 0, 2, 0],
+              [0, 1, 0, 0, 0, 4]
+            ]
+          }
+        },
+        {
+          "instrumentId": "inst_dict",
+          "name": "work-themes · dictionary",
+          "kind": "dictionary",
+          "level": "exploratory",
+          "versionHash": "d41a9ba3868e91b777f1c2d3e4a5b6c7",
+          "error": { "code": "NO_OUTPUTS", "message": "no comparable outputs — the dictionary's category labels do not align with the construct's categories" }
+        }
+      ],
+      "goldLabeled": 18
+    }
+  }
+}
