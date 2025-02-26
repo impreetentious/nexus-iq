@@ -1,0 +1,2164 @@
+// Task D — provider layer tests. Fully hermetic: every "provider API" here is
+// a local node:http server on an ephemeral 127.0.0.1 port; no test touches a
+// real network. MockModel tests are deterministic by construction.
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import http from "node:http";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import {
+  Adapter, Pool, completeWithRepair, parseRetryAfter, validateSchema, httpJSON, withTruncationRetry,
+} from "../../server/providers/base.js";
+import { NexusIQError } from "../../server/core/errors.js";
+import { AnthropicAdapter } from "../../server/providers/anthropic.js";
+import { OpenAIAdapter, toOpenAIStrict } from "../../server/providers/openai.js";
+import { OpenRouterAdapter } from "../../server/providers/openrouter.js";
+import { OllamaAdapter } from "../../server/providers/ollama.js";
+import { MockAdapter } from "../../server/providers/mock.js";
+import * as registry from "../../server/providers/registry.js";
+import { getAdapter } from "../../server/providers/registry.js";
+import { estimateRun, meter, checkBudget } from "../../server/providers/costs.js";
+import { mulberry32 } from "../../server/core/rng.js";
+
+// ---------------------------------------------------------------- helpers
+
+// Local HTTP server. handler(call, n) → {status?, headers?, body} | null (hang).
+function startServer(handler) {
+  const calls = [];
+  const server = http.createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      let body = null;
+      try { body = raw ? JSON.parse(raw) : null; } catch { body = raw; }
+      const call = { method: req.method, url: req.url, headers: req.headers, body, at: Date.now() };
+      calls.push(call);
+      const out = handler(call, calls.length);
+      if (out === null) return; // hang forever (for timeout tests)
+      res.writeHead(out.status ?? 200, { "content-type": "application/json", ...(out.headers ?? {}) });
+      res.end(typeof out.body === "string" ? out.body : JSON.stringify(out.body ?? {}));
+    });
+  });
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      resolve({
+        url: `http://127.0.0.1:${port}`,
+        calls,
+        close: () => { server.closeAllConnections(); return new Promise((r) => server.close(r)); },
+      });
+    });
+  });
+}
+
+async function withServer(handler, fn) {
+  const srv = await startServer(handler);
+  try { return await fn(srv); } finally { await srv.close(); }
+}
+
+// Raw server for body-phase fault injection: onRequest gets (req, res)
+// directly so tests can write partial bodies, stall, or destroy sockets.
+function rawServer(onRequest) {
+  const server = http.createServer(onRequest);
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      resolve({
+        url: `http://127.0.0.1:${server.address().port}`,
+        close: () => { server.closeAllConnections(); return new Promise((r) => server.close(r)); },
+      });
+    });
+  });
+}
+
+const judgeSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["rationale", "label", "confidence"],
+  properties: {
+    rationale: { type: "string" },
+    label: { type: "string", enum: ["pay", "management", "workload"] },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+  },
+};
+
+// The field-confirmed failing case: extraction-construct judge schema —
+// rationale+spans required, confidence OPTIONAL with bounds (judge.js
+// jsonSchemaFor). OpenAI-strict rejects it unless the adapter transforms it.
+const extractionJudgeSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["rationale", "spans"],
+  properties: {
+    rationale: { type: "string" },
+    spans: { type: "array", items: { type: "string" } },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+  },
+};
+
+const anthropicToolResponse = (json) => ({
+  body: {
+    id: "msg_01", type: "message", role: "assistant", model: "claude-3-5-sonnet",
+    stop_reason: "tool_use", stop_sequence: null,
+    usage: { input_tokens: 120, output_tokens: 45 },
+    content: [{ type: "tool_use", id: "toolu_01", name: "emit", input: json }],
+  },
+});
+
+const openaiResponse = (content, extra = {}) => ({
+  body: {
+    id: "chatcmpl-1", object: "chat.completion", model: "gpt-4-turbo",
+    choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 80, completion_tokens: 20 },
+    ...extra,
+  },
+});
+
+// Scripted in-memory adapter for completeWithRepair tests.
+function scriptedAdapter(texts) {
+  const calls = [];
+  return {
+    calls,
+    async complete(req) {
+      calls.push(req);
+      const text = texts[Math.min(calls.length - 1, texts.length - 1)];
+      return { text, usage: { inputTokens: 10, outputTokens: 5 }, finishReason: "stop", raw: {} };
+    },
+  };
+}
+
+// ---------------------------------------------------------------- Pool
+
+describe("Pool", () => {
+  it("retries 429s and succeeds on the 3rd attempt with growing delays", async () => {
+    await withServer(
+      (call, n) => (n < 3 ? { status: 429, body: { error: { type: "rate_limit_error" } } } : anthropicToolResponse({ label: "pay" })),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        // base 400ms: algebraic max for d1 is 1.25x base = 500ms, min for d2
+        // is 2x base = 800ms — a 300ms monotonicity margin that survives the
+        // event-loop scheduling noise of 13 suites running in parallel
+        // (observed +110ms inflation under full-suite load at base 60).
+        const pool = new Pool({ concurrency: 1, baseDelayMs: 400 });
+        const res = await pool.run(() => adapter.complete({
+          model: "claude-3-5-sonnet",
+          messages: [{ role: "user", content: "judge" }],
+          schema: judgeSchema, temperature: 0, maxTokens: 64,
+        }));
+        assert.equal(res.json.label, "pay");
+        assert.equal(srv.calls.length, 3);
+        const d1 = srv.calls[1].at - srv.calls[0].at;
+        const d2 = srv.calls[2].at - srv.calls[1].at;
+        assert.ok(d1 >= 300, `first backoff too small: ${d1}ms`);
+        assert.ok(d2 >= 700, `second backoff too small: ${d2}ms`);
+        assert.ok(d2 > d1, `delays not increasing: ${d1}ms then ${d2}ms`);
+      },
+    );
+  });
+
+  it("throws RATE_LIMITED_EXHAUSTED after exactly 6 attempts", async () => {
+    await withServer(
+      () => ({ status: 429, body: {} }),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        const pool = new Pool({ concurrency: 1, baseDelayMs: 4 });
+        await assert.rejects(
+          pool.run(() => adapter.complete({ model: "m", messages: [{ role: "user", content: "x" }], temperature: 0, maxTokens: 16 })),
+          (err) => err.code === "RATE_LIMITED_EXHAUSTED" && err.details.attempts === 6,
+        );
+        assert.equal(srv.calls.length, 6);
+      },
+    );
+  });
+
+  it("honors Retry-After header", async () => {
+    await withServer(
+      (call, n) => (n === 1
+        ? { status: 429, headers: { "retry-after": "1" }, body: {} }
+        : anthropicToolResponse({ label: "pay" })),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        const pool = new Pool({ concurrency: 1, baseDelayMs: 5 });
+        await pool.run(() => adapter.complete({
+          model: "m", messages: [{ role: "user", content: "x" }], schema: judgeSchema, temperature: 0, maxTokens: 16,
+        }));
+        assert.equal(srv.calls.length, 2);
+        assert.ok(srv.calls[1].at - srv.calls[0].at >= 950, "Retry-After: 1 not honored");
+      },
+    );
+  });
+
+  it("does not retry non-retryable HTTP errors", async () => {
+    await withServer(
+      () => ({ status: 400, body: { error: { type: "invalid_request_error" } } }),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        const pool = new Pool({ concurrency: 1, baseDelayMs: 5 });
+        await assert.rejects(
+          pool.run(() => adapter.complete({ model: "m", messages: [{ role: "user", content: "x" }], temperature: 0, maxTokens: 16 })),
+          (err) => err.code === "PROVIDER_HTTP" && err.details.status === 400,
+        );
+        assert.equal(srv.calls.length, 1);
+      },
+    );
+  });
+
+  it("caps concurrent executions", async () => {
+    const pool = new Pool({ concurrency: 2 });
+    let active = 0, peak = 0;
+    await Promise.all(Array.from({ length: 6 }, () => pool.run(async () => {
+      active++; peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, 15));
+      active--;
+    })));
+    assert.equal(peak, 2);
+  });
+
+  it("paces starts to the rpm window", async () => {
+    const pool = new Pool({ concurrency: 5, rpm: 2, windowMs: 150 });
+    const t0 = Date.now();
+    await Promise.all(Array.from({ length: 4 }, () => pool.run(async () => {})));
+    const elapsed = Date.now() - t0;
+    assert.ok(elapsed >= 120, `4 calls at rpm=2/window=150ms finished in ${elapsed}ms`);
+  });
+
+  it("parseRetryAfter handles seconds, dates, junk", () => {
+    assert.equal(parseRetryAfter("1"), 1000);
+    assert.equal(parseRetryAfter("0"), 0);
+    const ms = parseRetryAfter(new Date(Date.now() + 5000).toUTCString());
+    assert.ok(ms > 2500 && ms <= 6000, `date Retry-After parsed to ${ms}`);
+    assert.equal(parseRetryAfter("soon"), null);
+    assert.equal(parseRetryAfter(null), null);
+  });
+
+  it("clamps Retry-After to 120s for both numeric and date forms", () => {
+    assert.equal(parseRetryAfter("600"), 120_000);
+    assert.equal(parseRetryAfter(new Date(Date.now() + 1_000_000).toUTCString()), 120_000);
+    assert.equal(parseRetryAfter("30"), 30_000); // under the cap: untouched
+  });
+});
+
+// ------------------------------------------------- httpJSON body-phase faults
+
+describe("httpJSON body-phase failures", () => {
+  it("times out a stalled body within ~2× timeoutMs as PROVIDER_UNREACHABLE", async () => {
+    const srv = await rawServer((req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write('{"stalled":'); // headers + partial body, then silence forever
+    });
+    try {
+      const t0 = Date.now();
+      const p = httpJSON("POST", `${srv.url}/v1/x`, { body: {}, timeoutMs: 150 });
+      p.catch(() => {}); // any post-race rejection stays handled
+      const raced = await Promise.race([
+        p.then(() => "resolved", (err) => err),
+        new Promise((r) => setTimeout(() => r("pending"), 1500)),
+      ]);
+      assert.notEqual(raced, "pending",
+        "httpJSON still pending 1.5s after a 150ms timeout: body read is not covered by the abort timer");
+      assert.notEqual(raced, "resolved");
+      assert.equal(raced.code, "PROVIDER_UNREACHABLE");
+      assert.equal(typeof raced.details.kind, "string");
+      assert.ok(String(raced.details.url).includes("/v1/x"));
+      const elapsed = Date.now() - t0;
+      assert.ok(elapsed <= 600, `rejected after ${elapsed}ms; expected ≲2× timeoutMs (150ms)`);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("wraps a connection dropped mid-body as PROVIDER_UNREACHABLE with kind, not a raw TypeError", async () => {
+    const srv = await rawServer((req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write('{"half":');
+      setTimeout(() => res.destroy(), 30); // sever after headers+partial body are out
+    });
+    try {
+      await assert.rejects(
+        httpJSON("POST", `${srv.url}/v1/x`, { body: {} }),
+        (err) => {
+          assert.equal(err.name, "NexusIQError", `escaped the taxonomy as ${err.name}: ${err.message}`);
+          assert.equal(err.code, "PROVIDER_UNREACHABLE");
+          assert.equal(typeof err.details.kind, "string");
+          assert.ok(err.cause instanceof Error, "original error preserved as cause");
+          return true;
+        },
+      );
+    } finally {
+      await srv.close();
+    }
+  });
+});
+
+// ------------------------------------------------- retry policy / slot hygiene
+
+describe("Pool retry policy and slot hygiene", () => {
+  it("retries PROVIDER_UNREACHABLE on the smaller budget: exactly 3 attempts, then rethrows it", async () => {
+    // A dead port can't count attempts, so: accept each connection, count it,
+    // and destroy the socket immediately → every attempt is unreachable.
+    let accepts = 0;
+    const server = http.createServer(() => {});
+    server.on("connection", (sock) => { accepts++; sock.destroy(); });
+    await new Promise((r) => server.listen(0, "127.0.0.1", r));
+    const url = `http://127.0.0.1:${server.address().port}`;
+    try {
+      const adapter = new OllamaAdapter({ baseUrl: url });
+      const pool = new Pool({ concurrency: 1, baseDelayMs: 5 });
+      await assert.rejects(
+        pool.run(() => adapter.complete({ model: "m", messages: [{ role: "user", content: "x" }], temperature: 0, maxTokens: 8 })),
+        (err) => err.code === "PROVIDER_UNREACHABLE",
+      );
+      assert.equal(accepts, 3, `expected exactly 3 connection attempts, saw ${accepts}`);
+    } finally {
+      await new Promise((r) => server.close(r));
+    }
+  });
+
+  it("RATE_LIMITED_EXHAUSTED carries attemptsUsage (and retryAfterMs) from the last inner attempt", async () => {
+    // completeWithRepair/withTruncationRetry stamp the returned-but-failed
+    // attempts' spend onto err.details.attemptsUsage. When the Pool exhausts
+    // its budget it REPLACES that error with RATE_LIMITED_EXHAUSTED; the
+    // replacement used to drop attemptsUsage, so a metering consumer behind a
+    // Pool lost the quarantined/abandoned-unit spend entirely.
+    const pool = new Pool({ concurrency: 1, baseDelayMs: 1, maxAttempts: 3 });
+    let n = 0;
+    await assert.rejects(
+      pool.run(async () => {
+        n++;
+        throw new NexusIQError("PROVIDER_HTTP", "rate limited", {
+          status: 429,
+          retryAfterMs: 12_000,
+          attemptsUsage: { inputTokens: 100 * n, outputTokens: 20 * n, attempts: n },
+        });
+      }),
+      (err) => {
+        assert.equal(err.code, "RATE_LIMITED_EXHAUSTED");
+        assert.equal(err.details.attempts, 3, "exhaustion shape preserved");
+        assert.ok(err.details.attemptsUsage, "attemptsUsage must survive the exhaustion replacement");
+        // last inner attempt was n=3 → {300, 60, 3}
+        assert.deepEqual(err.details.attemptsUsage, { inputTokens: 300, outputTokens: 60, attempts: 3 });
+        assert.equal(err.details.retryAfterMs, 12_000, "retryAfterMs from the last attempt is carried too");
+        return true;
+      },
+    );
+    assert.equal(n, 3);
+  });
+
+  it("RATE_LIMITED_EXHAUSTED without an inner attemptsUsage leaves the field absent (no fabricated spend)", async () => {
+    const pool = new Pool({ concurrency: 1, baseDelayMs: 1, maxAttempts: 2 });
+    await assert.rejects(
+      pool.run(async () => { throw new NexusIQError("PROVIDER_HTTP", "rate limited", { status: 429 }); }),
+      (err) => {
+        assert.equal(err.code, "RATE_LIMITED_EXHAUSTED");
+        assert.equal("attemptsUsage" in err.details, false, "no inner usage → no fabricated attemptsUsage");
+        return true;
+      },
+    );
+  });
+
+  it("slot-leak regression: full capacity remains after N>concurrency throwing fns", async () => {
+    const pool = new Pool({ concurrency: 2, baseDelayMs: 1 });
+    const burst = await Promise.allSettled(
+      Array.from({ length: 6 }, () => pool.run(async () => { throw new Error("boom"); })),
+    );
+    assert.ok(burst.every((r) => r.status === "rejected"));
+    let active = 0, peak = 0;
+    await Promise.all(Array.from({ length: 5 }, () => pool.run(async () => {
+      active++; peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, 15));
+      active--;
+    })));
+    assert.equal(peak, 2, `peak concurrency ${peak}; pool capacity damaged or exceeded`);
+  });
+});
+
+// ---------------------------------------------------------------- Anthropic
+
+describe("AnthropicAdapter", () => {
+  it("forces tool use for schemas and parses the tool_use block", async () => {
+    const json = { rationale: "mentions pay", label: "pay", confidence: 0.91 };
+    await withServer(
+      () => anthropicToolResponse(json),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "sk-ant-test", baseUrl: srv.url });
+        const res = await adapter.complete({
+          model: "claude-3-5-sonnet",
+          messages: [
+            { role: "system", content: "You are a careful judge." },
+            { role: "user", content: "Label this. <unit>The pay is terrible.</unit>" },
+          ],
+          schema: judgeSchema, temperature: 0, maxTokens: 200,
+        });
+        const call = srv.calls[0];
+        assert.equal(call.method, "POST");
+        assert.equal(call.url, "/v1/messages");
+        assert.equal(call.headers["x-api-key"], "sk-ant-test");
+        assert.equal(call.headers["anthropic-version"], "2023-06-01");
+        assert.equal(call.body.model, "claude-3-5-sonnet");
+        assert.equal(call.body.system, "You are a careful judge.");
+        assert.deepEqual(call.body.messages, [{ role: "user", content: "Label this. <unit>The pay is terrible.</unit>" }]);
+        assert.equal(call.body.temperature, 0);
+        assert.equal(call.body.max_tokens, 200);
+        assert.equal(call.body.tools.length, 1);
+        assert.equal(call.body.tools[0].name, "emit");
+        assert.deepEqual(call.body.tools[0].input_schema, judgeSchema);
+        assert.deepEqual(call.body.tool_choice, { type: "tool", name: "emit" });
+
+        assert.deepEqual(res.json, json);
+        assert.deepEqual(res.usage, { inputTokens: 120, outputTokens: 45 });
+        assert.equal(res.finishReason, "tool_use");
+        assert.ok(res.raw && res.raw.id === "msg_01");
+      },
+    );
+  });
+
+  it("plain completion sends no tools and returns text", async () => {
+    await withServer(
+      () => ({
+        body: {
+          id: "msg_02", content: [{ type: "text", text: "hello there" }],
+          stop_reason: "end_turn", usage: { input_tokens: 5, output_tokens: 3 },
+        },
+      }),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        const res = await adapter.complete({ model: "m", messages: [{ role: "user", content: "hi" }], temperature: 0, maxTokens: 50 });
+        assert.equal(srv.calls[0].body.tools, undefined);
+        assert.equal(srv.calls[0].body.tool_choice, undefined);
+        assert.equal(res.text, "hello there");
+        assert.equal(res.json, undefined);
+        assert.equal(res.finishReason, "end_turn");
+      },
+    );
+  });
+
+  it("fast-fails TRUNCATED when stop_reason=max_tokens and the tool_use block is absent on a schema request", async () => {
+    // A response that hit max_tokens before the forced tool call landed: the
+    // emit tool block never started, so json would be undefined and the repair
+    // loop would burn its budget then quarantine as SCHEMA_INVALID — masking a
+    // truncation the doubled-budget retry was built to fix.
+    await withServer(
+      () => ({
+        body: {
+          id: "msg_t", type: "message", role: "assistant", model: "claude-3-5-sonnet",
+          stop_reason: "max_tokens", stop_sequence: null,
+          usage: { input_tokens: 120, output_tokens: 64 },
+          content: [{ type: "text", text: "Let me think about this" }], // thinking/preamble, no tool_use
+        },
+      }),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        await assert.rejects(
+          completeWithRepair(adapter, { model: "m", messages: [{ role: "user", content: "x" }], schema: judgeSchema, temperature: 0, maxTokens: 64 }),
+          (err) => err.code === "TRUNCATED" && /maxTokens/.test(err.message),
+        );
+        assert.equal(srv.calls.length, 1, "truncation must not trigger repair re-prompts");
+      },
+    );
+  });
+
+  it("a partial tool_use block at max_tokens (unparseable input) is TRUNCATED, not SCHEMA_INVALID", async () => {
+    // stop_reason max_tokens WITH a tool_use block whose input is incomplete:
+    // Anthropic still ships the partial block, so `tool` is found but its input
+    // fails the schema. This must surface as TRUNCATED so the budget doubles.
+    await withServer(
+      () => ({
+        body: {
+          id: "msg_tp", type: "message", role: "assistant", model: "claude-3-5-sonnet",
+          stop_reason: "max_tokens", stop_sequence: null,
+          usage: { input_tokens: 120, output_tokens: 64 },
+          content: [{ type: "tool_use", id: "toolu_p", name: "emit", input: { rationale: "the pay is" } }], // missing label+confidence
+        },
+      }),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        await assert.rejects(
+          completeWithRepair(adapter, { model: "m", messages: [{ role: "user", content: "x" }], schema: judgeSchema, temperature: 0, maxTokens: 64 }),
+          (err) => err.code === "TRUNCATED",
+        );
+        assert.equal(srv.calls.length, 1, "truncation must not trigger repair re-prompts");
+      },
+    );
+  });
+
+  it("max_tokens with a COMPLETE, schema-valid tool block is not TRUNCATED (the limit was generous)", async () => {
+    // stop_reason can be max_tokens even when the emitted JSON is already valid;
+    // a valid tool block must pass through, never spuriously truncate.
+    await withServer(
+      () => ({
+        body: {
+          id: "msg_ok", type: "message", role: "assistant", model: "claude-3-5-sonnet",
+          stop_reason: "max_tokens", stop_sequence: null,
+          usage: { input_tokens: 120, output_tokens: 64 },
+          content: [{ type: "tool_use", id: "toolu_ok", name: "emit", input: { rationale: "r", label: "pay", confidence: 0.8 } }],
+        },
+      }),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        const res = await adapter.complete({ model: "m", messages: [{ role: "user", content: "x" }], schema: judgeSchema, temperature: 0, maxTokens: 64 });
+        assert.deepEqual(res.json, { rationale: "r", label: "pay", confidence: 0.8 });
+      },
+    );
+  });
+
+  it("keyless: complete throws CONFIG_MISSING without any fetch; catalog still works", async () => {
+    const realFetch = globalThis.fetch;
+    let fetches = 0;
+    globalThis.fetch = () => { fetches++; throw new Error("network blocked by test"); };
+    try {
+      const adapter = new AnthropicAdapter({});
+      await assert.rejects(
+        adapter.complete({ model: "m", messages: [{ role: "user", content: "x" }], temperature: 0, maxTokens: 16 }),
+        { code: "CONFIG_MISSING" },
+      );
+      assert.equal(fetches, 0);
+      const cat = await adapter.catalog();
+      assert.equal(fetches, 0);
+      const ids = cat.map((m) => m.id);
+      assert.deepEqual(ids, ["claude-3-opus", "claude-3-5-sonnet", "claude-3-5-haiku"]);
+      for (const m of cat) {
+        assert.equal(m.estimate, true);
+        assert.equal(m.family, "anthropic");
+        assert.ok(m.pricing.inUSDper1M > 0 && m.pricing.outUSDper1M > 0);
+        assert.ok(m.ctx > 0 && typeof m.snapshot === "string");
+      }
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("capabilities", () => {
+    assert.deepEqual(new AnthropicAdapter({}).capabilities(),
+      { structuredOutput: true, pinning: true, batch: false, local: false, family: "anthropic" });
+  });
+});
+
+// ------------------------------------------------- Anthropic live catalog
+// The Models API (GET /v1/models) returns ids + display names but NO pricing
+// or context windows; the adapter merges those from its static table by
+// longest-id-prefix, and marks anything it cannot price as an honest unknown.
+
+describe("AnthropicAdapter.catalog (live)", () => {
+  // Shape captured from the real endpoint: {data:[{id,display_name,
+  // type,created_at}], has_more, first_id, last_id}. Pagination uses ?after_id.
+  const modelsPage = (data, has_more = false) => ({
+    body: { data, has_more, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null },
+  });
+
+  it("fetches /v1/models with auth headers and merges static pricing by longest-id-prefix", async () => {
+    await withServer(
+      (call) => {
+        assert.equal(call.method, "GET");
+        assert.match(call.url, /^\/v1\/models(\?|$)/);
+        return modelsPage([
+          // dated snapshot ids → prefix-match the bare static ids
+          { id: "claude-3-opus-20240229", display_name: "Claude 3 Opus", type: "model" },
+          { id: "claude-3-5-sonnet-20241022", display_name: "Claude 3.5 Sonnet", type: "model" },
+          // a brand-new model absent from the static table → honest unknown
+          { id: "claude-flux-9-0-20260601", display_name: "Claude Flux 9.0", type: "model" },
+        ]);
+      },
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "sk-ant-live", baseUrl: srv.url });
+        const cat = await adapter.catalog();
+        const call = srv.calls[0];
+        assert.equal(call.headers["x-api-key"], "sk-ant-live");
+        assert.equal(call.headers["anthropic-version"], "2023-06-01");
+
+        const byId = Object.fromEntries(cat.map((m) => [m.id, m]));
+        // live ids appear (the field complaint: new snapshots never showed up)
+        assert.deepEqual(cat.map((m) => m.id), [
+          "claude-3-opus-20240229", "claude-3-5-sonnet-20241022", "claude-flux-9-0-20260601",
+        ]);
+        // opus snapshot inherited the static opus pricing + ctx by prefix
+        assert.deepEqual(byId["claude-3-opus-20240229"].pricing, { inUSDper1M: 15, outUSDper1M: 75 });
+        assert.equal(byId["claude-3-opus-20240229"].ctx, 200_000);
+        assert.equal(byId["claude-3-opus-20240229"].name, "Claude 3 Opus");
+        assert.equal(byId["claude-3-opus-20240229"].family, "anthropic");
+        assert.equal(byId["claude-3-opus-20240229"].snapshot, "claude-3-opus-20240229");
+        assert.deepEqual(byId["claude-3-5-sonnet-20241022"].pricing, { inUSDper1M: 3, outUSDper1M: 15 });
+        // unmatched model → {0,0} pricing, ctx null, estimate flag set (honest)
+        assert.deepEqual(byId["claude-flux-9-0-20260601"].pricing, { inUSDper1M: 0, outUSDper1M: 0 });
+        assert.equal(byId["claude-flux-9-0-20260601"].ctx, null);
+        assert.equal(byId["claude-flux-9-0-20260601"].estimate, true);
+        // capability fields carried so the catalog route stays consistent
+        assert.equal(byId["claude-flux-9-0-20260601"].structuredOutput, true);
+      },
+    );
+  });
+
+  it("paginates via has_more/after_id, accumulating every page", async () => {
+    await withServer(
+      (call, n) => {
+        if (n === 1) {
+          assert.ok(!/after_id/.test(call.url), "first page must not send after_id");
+          return modelsPage([{ id: "claude-3-opus-20240229", display_name: "Opus", type: "model" }], true);
+        }
+        assert.match(call.url, /after_id=claude-3-opus-20240229/, "second page cursors on last_id");
+        return modelsPage([{ id: "claude-3-5-haiku-20260101", display_name: "Haiku", type: "model" }], false);
+      },
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        const cat = await adapter.catalog();
+        assert.equal(srv.calls.length, 2, "exactly two pages fetched");
+        assert.deepEqual(cat.map((m) => m.id), ["claude-3-opus-20240229", "claude-3-5-haiku-20260101"]);
+      },
+    );
+  });
+
+  it("fetch failure falls back to the static catalog unchanged", async () => {
+    await withServer(
+      () => ({ status: 500, body: { error: { type: "internal" } } }),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        const cat = await adapter.catalog();
+        assert.deepEqual(cat.map((m) => m.id), ["claude-3-opus", "claude-3-5-sonnet", "claude-3-5-haiku"]);
+        for (const m of cat) assert.equal(m.estimate, true);
+      },
+    );
+  });
+
+  it("caches the live fetch for 1h; force re-fetches", async () => {
+    await withServer(
+      () => modelsPage([{ id: "claude-3-opus-20240229", display_name: "Opus", type: "model" }]),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        await adapter.catalog();
+        await adapter.catalog();
+        assert.equal(srv.calls.length, 1, "second call within the TTL serves the in-adapter cache");
+        await adapter.catalog({ force: true });
+        assert.equal(srv.calls.length, 2, "force bypasses the cache");
+      },
+    );
+  });
+});
+
+// ---------------------------------------------------------------- OpenAI
+
+describe("OpenAIAdapter", () => {
+  it("round-trips json_schema response_format", async () => {
+    await withServer(
+      () => openaiResponse('{"rationale":"says pay","label":"pay","confidence":0.8}'),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "sk-oai-test", baseUrl: srv.url });
+        const messages = [
+          { role: "system", content: "Judge." },
+          { role: "user", content: "Label: <unit>pay is bad</unit>" },
+        ];
+        const res = await adapter.complete({ model: "gpt-4-turbo", messages, schema: judgeSchema, temperature: 0, maxTokens: 150, seed: 11 });
+        const call = srv.calls[0];
+        assert.equal(call.url, "/v1/chat/completions");
+        assert.equal(call.headers.authorization, "Bearer sk-oai-test");
+        assert.deepEqual(call.body.messages, messages);
+        assert.equal(call.body.temperature, 0);
+        assert.equal(call.body.max_completion_tokens, 150);
+        assert.equal(call.body.seed, 11);
+        assert.deepEqual(call.body.response_format, {
+          type: "json_schema",
+          json_schema: { name: "emit", schema: judgeSchema, strict: true },
+        });
+        assert.deepEqual(res.json, { rationale: "says pay", label: "pay", confidence: 0.8 });
+        assert.deepEqual(res.usage, { inputTokens: 80, outputTokens: 20 });
+        assert.equal(res.finishReason, "stop");
+      },
+    );
+  });
+
+  it("fast-fails PROVIDER_REFUSAL on message.refusal without entering the repair loop", async () => {
+    await withServer(
+      () => ({
+        body: {
+          id: "chatcmpl-r", object: "chat.completion", model: "gpt-4-turbo",
+          choices: [{ index: 0, message: { role: "assistant", content: null, refusal: "I can't help with that." }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 5, completion_tokens: 1 },
+        },
+      }),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        await assert.rejects(
+          completeWithRepair(adapter, { model: "m", messages: [{ role: "user", content: "x" }], schema: judgeSchema, temperature: 0, maxTokens: 64 }),
+          (err) => err.code === "PROVIDER_REFUSAL" && /refus/i.test(err.message),
+        );
+        assert.equal(srv.calls.length, 1, "refusal must not trigger repair re-prompts");
+      },
+    );
+  });
+
+  it("fast-fails TRUNCATED when finish_reason=length and a schema was requested", async () => {
+    await withServer(
+      () => ({
+        body: {
+          id: "chatcmpl-t", object: "chat.completion", model: "gpt-4-turbo",
+          choices: [{ index: 0, message: { role: "assistant", content: '{"rationale":"r","label":"pa' }, finish_reason: "length" }],
+          usage: { prompt_tokens: 5, completion_tokens: 64 },
+        },
+      }),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        await assert.rejects(
+          completeWithRepair(adapter, { model: "m", messages: [{ role: "user", content: "x" }], schema: judgeSchema, temperature: 0, maxTokens: 64 }),
+          (err) => err.code === "TRUNCATED" && /maxTokens/.test(err.message),
+        );
+        assert.equal(srv.calls.length, 1, "truncation must not trigger repair re-prompts");
+      },
+    );
+  });
+
+  it("finish_reason=length without a schema is not an error (plain text may be capped on purpose)", async () => {
+    await withServer(
+      () => ({
+        body: {
+          id: "chatcmpl-l", choices: [{ index: 0, message: { role: "assistant", content: "partial tex" }, finish_reason: "length" }],
+          usage: { prompt_tokens: 5, completion_tokens: 16 },
+        },
+      }),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        const res = await adapter.complete({ model: "m", messages: [{ role: "user", content: "x" }], temperature: 0, maxTokens: 16 });
+        assert.equal(res.text, "partial tex");
+        assert.equal(res.finishReason, "length");
+      },
+    );
+  });
+
+  it("keyless throws CONFIG_MISSING; static catalog marked estimate", async () => {
+    const adapter = new OpenAIAdapter({});
+    await assert.rejects(
+      adapter.complete({ model: "m", messages: [{ role: "user", content: "x" }], temperature: 0, maxTokens: 16 }),
+      { code: "CONFIG_MISSING" },
+    );
+    const cat = await adapter.catalog();
+    assert.ok(cat.length >= 2);
+    for (const m of cat) {
+      assert.equal(m.estimate, true);
+      assert.equal(m.family, "openai");
+      assert.ok(m.pricing.inUSDper1M > 0);
+    }
+    assert.deepEqual(adapter.capabilities(),
+      { structuredOutput: true, pinning: true, batch: false, local: false, family: "openai" });
+  });
+});
+
+// ------------------------------------------------- OpenAI live catalog
+// GET /v1/models lists EVERY model the key can reach — embeddings, TTS,
+// whisper, dall-e, moderation, audio/realtime — none of which Nexus IQ can
+// drive as a judge. The adapter filters to chat-capable families and merges
+// pricing/context from its static table by longest-id-prefix.
+
+describe("OpenAIAdapter.catalog (live)", () => {
+  // Real /v1/models shape: {object:"list", data:[{id, object:"model", created, owned_by}]}.
+  const modelsList = (ids) => ({
+    body: { object: "list", data: ids.map((id) => ({ id, object: "model", created: 1, owned_by: "openai" })) },
+  });
+
+  it("filters non-chat families, keeps chat models, merges pricing by prefix", async () => {
+    await withServer(
+      (call) => {
+        assert.equal(call.method, "GET");
+        assert.equal(call.url, "/v1/models");
+        assert.equal(call.headers.authorization, "Bearer sk-oai-live");
+        return modelsList([
+          "gpt-4-turbo",                  // exact static match
+          "gpt-4-turbo-preview-2026-05-01",  // dated → prefix-match gpt-4-turbo-preview
+          "gpt-6-preview",            // chat, but no static entry → honest unknown
+          "o3-mini",                  // o-series reasoning → chat-capable
+          "chatgpt-4o-latest",        // chatgpt prefix → chat
+          // everything below must be filtered out:
+          "text-embedding-3-large",
+          "gpt-4o-realtime-preview",
+          "whisper-1",
+          "dall-e-3",
+          "omni-moderation-latest",
+          "gpt-4o-realtime-preview",
+          "gpt-4o-audio-preview",
+          "gpt-4o-audio-preview",
+          "dall-e-2",
+        ]);
+      },
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "sk-oai-live", baseUrl: srv.url });
+        const cat = await adapter.catalog();
+        const ids = cat.map((m) => m.id);
+        assert.deepEqual(ids, ["gpt-4-turbo", "gpt-4-turbo-preview-2026-05-01", "gpt-6-preview", "o3-mini", "chatgpt-4o-latest"],
+          "only chat-capable families survive, in list order");
+
+        const byId = Object.fromEntries(cat.map((m) => [m.id, m]));
+        assert.deepEqual(byId["gpt-4-turbo"].pricing, { inUSDper1M: 10, outUSDper1M: 30 });
+        assert.equal(byId["gpt-4-turbo"].ctx, 128_000);
+        assert.equal(byId["gpt-4-turbo"].family, "openai");
+        // dated preview snapshot inherits preview pricing by prefix
+        assert.deepEqual(byId["gpt-4-turbo-preview-2026-05-01"].pricing, { inUSDper1M: 10, outUSDper1M: 30 });
+        assert.equal(byId["gpt-4-turbo-preview-2026-05-01"].snapshot, "gpt-4-turbo-preview-2026-05-01");
+        // unknown chat model → honest unknown
+        assert.deepEqual(byId["gpt-6-preview"].pricing, { inUSDper1M: 0, outUSDper1M: 0 });
+        assert.equal(byId["gpt-6-preview"].ctx, null);
+        assert.equal(byId["gpt-6-preview"].estimate, true);
+        assert.equal(byId["o3-mini"].estimate, true, "o-series with no static row is an honest unknown");
+        // capability fields present for catalog-route consistency
+        assert.equal(byId["gpt-4-turbo"].structuredOutput, true);
+      },
+    );
+  });
+
+  it("a gpt-4-turbo-preview listing resolves by prefix to a priced row", async () => {
+    await withServer(
+      () => modelsList(["gpt-4-turbo-preview"]),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        const cat = await adapter.catalog();
+        // priced from the static table, never the {0,0} honest unknown
+        assert.deepEqual(cat[0].pricing, { inUSDper1M: 10, outUSDper1M: 30 });
+      },
+    );
+  });
+
+  it("fetch failure falls back to the static catalog unchanged", async () => {
+    await withServer(
+      () => ({ status: 503, body: "<html>down</html>" }),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        const cat = await adapter.catalog();
+        assert.deepEqual(cat.map((m) => m.id), ["gpt-4-turbo", "gpt-4-turbo-preview"]);
+        for (const m of cat) assert.equal(m.estimate, true);
+      },
+    );
+  });
+
+  it("keyless: no fetch, static fallback", async () => {
+    const realFetch = globalThis.fetch;
+    let fetches = 0;
+    globalThis.fetch = () => { fetches++; throw new Error("network blocked by test"); };
+    try {
+      const cat = await new OpenAIAdapter({}).catalog();
+      assert.equal(fetches, 0, "keyless catalog must not hit the network");
+      assert.deepEqual(cat.map((m) => m.id), ["gpt-4-turbo", "gpt-4-turbo-preview"]);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("caches the live fetch for 1h; force re-fetches", async () => {
+    await withServer(
+      () => modelsList(["gpt-4-turbo"]),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        await adapter.catalog();
+        await adapter.catalog();
+        assert.equal(srv.calls.length, 1, "second call within the TTL serves the in-adapter cache");
+        await adapter.catalog({ force: true });
+        assert.equal(srv.calls.length, 2, "force bypasses the cache");
+      },
+    );
+  });
+});
+
+// ------------------------------------------------- OpenAI strict dialect
+// Dialect facts live-verified against openai/gpt-4o-mini via OpenRouter
+// Strict requires `required` to list EVERY property key at every
+// object level (400 otherwise); `type: [t, "null"]` is the optional marker;
+// minimum/maximum are ACCEPTED; an enum stays valid when its type is unioned
+// with "null"; enum-only properties (no type) are accepted as-is.
+
+describe("toOpenAIStrict", () => {
+  it("requires every property and turns optionals nullable (the exact field-failing case)", () => {
+    assert.deepEqual(toOpenAIStrict(extractionJudgeSchema), {
+      type: "object",
+      additionalProperties: false,
+      required: ["rationale", "spans", "confidence"],
+      properties: {
+        rationale: { type: "string" },
+        spans: { type: "array", items: { type: "string" } },
+        confidence: { type: ["number", "null"], minimum: 0, maximum: 1 }, // bounds kept: live-accepted
+      },
+    });
+  });
+
+  it("does not mutate the input schema", () => {
+    const orig = structuredClone(extractionJudgeSchema);
+    toOpenAIStrict(extractionJudgeSchema);
+    assert.deepEqual(extractionJudgeSchema, orig);
+  });
+
+  it("recurses into nested objects and array items", () => {
+    const out = toOpenAIStrict({
+      type: "object",
+      required: ["rows"],
+      properties: {
+        rows: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id"],
+            properties: { id: { type: "string" }, note: { type: "string" } },
+          },
+        },
+        meta: { type: "object", properties: { source: { type: "string" } } },
+      },
+    });
+    assert.deepEqual(out.required, ["rows", "meta"]);
+    assert.equal(out.additionalProperties, false);
+    const item = out.properties.rows.items;
+    assert.deepEqual(item.required, ["id", "note"]);
+    assert.equal(item.additionalProperties, false);
+    assert.equal(item.properties.id.type, "string");
+    assert.deepEqual(item.properties.note.type, ["string", "null"]);
+    // an optional nested object becomes nullable itself; its members transform too
+    assert.deepEqual(out.properties.meta.type, ["object", "null"]);
+    assert.equal(out.properties.meta.additionalProperties, false);
+    assert.deepEqual(out.properties.meta.required, ["source"]);
+    assert.deepEqual(out.properties.meta.properties.source.type, ["string", "null"]);
+  });
+
+  it("handles type arrays without double-null", () => {
+    const out = toOpenAIStrict({
+      type: "object",
+      required: [],
+      properties: {
+        a: { type: ["string", "null"] },
+        b: { type: ["integer"] },
+      },
+    });
+    assert.deepEqual(out.properties.a.type, ["string", "null"]);
+    assert.deepEqual(out.properties.b.type, ["integer", "null"]);
+    assert.deepEqual(out.required, ["a", "b"]);
+  });
+
+  it("enums: required enum-only stays untouched; optional enums keep the enum and union type with null", () => {
+    const out = toOpenAIStrict({
+      type: "object",
+      required: ["label"],
+      properties: {
+        label: { enum: ["pay", "management"] }, // judge label shape — live-accepted as-is
+        mood: { type: "string", enum: ["happy", "sad"] },
+        rank: { enum: [1, 2, 3] }, // enum-only optional: type derived from values, then null
+      },
+    });
+    assert.deepEqual(out.properties.label, { enum: ["pay", "management"] });
+    assert.deepEqual(out.properties.mood, { type: ["string", "null"], enum: ["happy", "sad"] });
+    assert.deepEqual(out.properties.rank, { type: ["number", "null"], enum: [1, 2, 3] });
+    assert.deepEqual(out.required, ["label", "mood", "rank"]);
+  });
+
+  it("keeps minimum/maximum on required numerics (live probe: strict accepts bounds)", () => {
+    const out = toOpenAIStrict({
+      type: "object",
+      required: ["score"],
+      properties: { score: { type: "number", minimum: 0, maximum: 100 } },
+    });
+    assert.deepEqual(out.properties.score, { type: "number", minimum: 0, maximum: 100 });
+  });
+
+  it("adds type:'object' to type-omitted property bags (Director-generated) and forces additionalProperties:false", () => {
+    const out = toOpenAIStrict({
+      properties: { label: { type: "string" } },
+      required: ["label"],
+      additionalProperties: true,
+    });
+    assert.equal(out.type, "object");
+    assert.equal(out.additionalProperties, false);
+    assert.deepEqual(out.required, ["label"]);
+  });
+
+  it("recurses into anyOf members; an optional anyOf gains a null member", () => {
+    const out = toOpenAIStrict({
+      type: "object",
+      required: ["v"],
+      properties: {
+        v: {
+          anyOf: [
+            { type: "object", required: ["a"], properties: { a: { type: "string" }, b: { type: "string" } } },
+            { type: "string" },
+          ],
+        },
+        w: { anyOf: [{ type: "string" }, { type: "number" }] },
+      },
+    });
+    const [obj] = out.properties.v.anyOf;
+    assert.deepEqual(obj.required, ["a", "b"]);
+    assert.deepEqual(obj.properties.b.type, ["string", "null"]);
+    assert.equal(obj.additionalProperties, false);
+    assert.equal(out.properties.v.anyOf.length, 2, "required anyOf must not gain a null member");
+    assert.deepEqual(out.properties.w.anyOf.at(-1), { type: "null" }, "optional anyOf gains a null member");
+  });
+});
+
+describe("OpenAI strict dialect on the wire", () => {
+  it("buildBody sends the TRANSFORMED schema; req.schema stays the original", async () => {
+    await withServer(
+      () => openaiResponse('{"rationale":"r","spans":["The pay is awful"],"confidence":0.8}'),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        const req = {
+          model: "gpt-4-turbo", messages: [{ role: "user", content: "<unit>The pay is awful.</unit>" }],
+          schema: extractionJudgeSchema, temperature: 0, maxTokens: 128,
+        };
+        await adapter.complete(req);
+        const sent = srv.calls[0].body.response_format;
+        assert.equal(sent.type, "json_schema");
+        assert.equal(sent.json_schema.name, "emit");
+        assert.equal(sent.json_schema.strict, true);
+        assert.deepEqual(sent.json_schema.schema, toOpenAIStrict(extractionJudgeSchema));
+        assert.deepEqual(sent.json_schema.schema.required, ["rationale", "spans", "confidence"]);
+        assert.deepEqual(req.schema, extractionJudgeSchema, "request schema must stay untransformed");
+      },
+    );
+  });
+
+  it("explicit null for a transform-nullable field is DELETED from json (downstream sees absent)", async () => {
+    await withServer(
+      () => openaiResponse('{"rationale":"r","spans":["x"],"confidence":null}'),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        const res = await adapter.complete({
+          model: "m", messages: [{ role: "user", content: "x" }],
+          schema: extractionJudgeSchema, temperature: 0, maxTokens: 64,
+        });
+        assert.deepEqual(res.json, { rationale: "r", spans: ["x"] });
+        assert.equal("confidence" in res.json, false);
+        assert.deepEqual(validateSchema(res.json, extractionJudgeSchema), [],
+          "null-normalized response must pass the ORIGINAL schema");
+      },
+    );
+  });
+
+  it("null-strip recurses into nested objects and array items", async () => {
+    const schema = {
+      type: "object",
+      required: ["rows"],
+      properties: {
+        rows: {
+          type: "array",
+          items: { type: "object", required: ["id"], properties: { id: { type: "string" }, note: { type: "string" } } },
+        },
+        meta: { type: "object", properties: { source: { type: "string" } } },
+      },
+    };
+    await withServer(
+      () => openaiResponse('{"rows":[{"id":"1","note":null}],"meta":null}'),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        const res = await adapter.complete({
+          model: "m", messages: [{ role: "user", content: "x" }], schema, temperature: 0, maxTokens: 64,
+        });
+        assert.deepEqual(res.json, { rows: [{ id: "1" }] });
+        assert.deepEqual(validateSchema(res.json, schema), []);
+      },
+    );
+  });
+
+  it("an ORIGINALLY-nullable field keeps its explicit null", async () => {
+    const schema = {
+      type: "object",
+      required: ["a", "b"],
+      properties: { a: { type: ["string", "null"] }, b: { type: "string" } },
+    };
+    await withServer(
+      () => openaiResponse('{"a":null,"b":"x"}'),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        const res = await adapter.complete({
+          model: "m", messages: [{ role: "user", content: "x" }], schema, temperature: 0, maxTokens: 64,
+        });
+        assert.deepEqual(res.json, { a: null, b: "x" });
+        assert.deepEqual(validateSchema(res.json, schema), []);
+      },
+    );
+  });
+
+  it("openrouter inherits the transform and the null-strip from openai", async () => {
+    await withServer(
+      () => openaiResponse('{"rationale":"r","spans":["x"],"confidence":null}', { provider: "Azure" }),
+      async (srv) => {
+        const adapter = new OpenRouterAdapter({ apiKey: "k", baseUrl: srv.url });
+        const res = await adapter.complete({
+          model: "openai/gpt-4o-mini", messages: [{ role: "user", content: "x" }],
+          schema: extractionJudgeSchema, temperature: 0, maxTokens: 64,
+        });
+        assert.deepEqual(
+          srv.calls[0].body.response_format.json_schema.schema,
+          toOpenAIStrict(extractionJudgeSchema),
+          "openrouter must send the same transformed schema as openai",
+        );
+        assert.deepEqual(res.json, { rationale: "r", spans: ["x"] });
+        assert.equal(res.servedBy, "Azure");
+      },
+    );
+  });
+
+  it("the anthropic adapter sends the ORIGINAL schema untransformed (tool-use accepts optionals)", async () => {
+    await withServer(
+      () => anthropicToolResponse({ rationale: "r", spans: ["x"] }),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        await adapter.complete({
+          model: "claude-3-5-sonnet", messages: [{ role: "user", content: "x" }],
+          schema: extractionJudgeSchema, temperature: 0, maxTokens: 64,
+        });
+        assert.deepEqual(srv.calls[0].body.tools[0].input_schema, extractionJudgeSchema);
+      },
+    );
+  });
+});
+
+// ---------------------------------------------------------------- OpenRouter
+
+describe("OpenRouterAdapter", () => {
+  it("sends attribution headers and records servedBy", async () => {
+    await withServer(
+      () => openaiResponse('{"rationale":"r","label":"pay","confidence":0.7}', { provider: "Fireworks" }),
+      async (srv) => {
+        const adapter = new OpenRouterAdapter({ apiKey: "sk-or-test", baseUrl: srv.url });
+        const res = await adapter.complete({
+          model: "meta-llama/llama-3.3-70b-instruct",
+          messages: [{ role: "user", content: "x" }],
+          schema: judgeSchema, temperature: 0, maxTokens: 100,
+        });
+        const call = srv.calls[0];
+        assert.equal(call.url, "/v1/chat/completions");
+        assert.equal(call.headers["http-referer"], "https://nexus-iq.local");
+        assert.equal(call.headers["x-title"], "Nexus IQ");
+        assert.equal(call.headers.authorization, "Bearer sk-or-test");
+        assert.equal(call.body.max_tokens, 100); // OpenRouter dialect keeps max_tokens
+        assert.equal(res.servedBy, "Fireworks");
+        assert.equal(res.json.label, "pay");
+      },
+    );
+  });
+
+  it("maps the live model catalog, deriving family and capability flags from supported_parameters", async () => {
+    await withServer(
+      (call) => {
+        assert.equal(call.url, "/v1/models");
+        return {
+          body: {
+            data: [
+              { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B", context_length: 131072, pricing: { prompt: "0.00000012", completion: "0.0000003" }, supported_parameters: ["temperature", "top_p", "structured_outputs", "response_format"] },
+              { id: "openai/gpt-4-turbo", name: "GPT-4 Turbo", context_length: 128000, pricing: { prompt: "0.00001", completion: "0.00003" }, supported_parameters: ["response_format", "temperature", "seed"] },
+              { id: "acme/no-frills-1", name: "No Frills", context_length: 8192, pricing: { prompt: "0.0000001", completion: "0.0000002" }, supported_parameters: ["max_tokens"] },
+              { id: "acme/legacy-0", name: "Legacy", context_length: 4096, pricing: { prompt: "0", completion: "0" } },
+            ],
+          },
+        };
+      },
+      async (srv) => {
+        const adapter = new OpenRouterAdapter({ apiKey: "k", baseUrl: srv.url });
+        const cat = await adapter.catalog();
+        assert.deepEqual(cat[0], {
+          id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B", family: "meta",
+          ctx: 131072, pricing: { inUSDper1M: 0.12, outUSDper1M: 0.3 },
+          snapshot: "meta-llama/llama-3.3-70b-instruct",
+          structuredOutput: true, noTemperature: false,
+          params: ["temperature", "top_p", "structured_outputs", "response_format"],
+        });
+        assert.equal(cat[1].family, "openai");
+        assert.equal(cat[1].pricing.inUSDper1M, 10);
+        assert.equal(cat[1].structuredOutput, true, "response_format alone counts as structured output");
+        assert.equal(cat[1].noTemperature, false);
+        // no structured_outputs/response_format and no temperature
+        assert.equal(cat[2].structuredOutput, false);
+        assert.equal(cat[2].noTemperature, true);
+        assert.deepEqual(cat[2].params, ["max_tokens"]);
+        // supported_parameters absent → conservative flags, empty params
+        assert.equal(cat[3].structuredOutput, false);
+        assert.equal(cat[3].noTemperature, true);
+        assert.deepEqual(cat[3].params, []);
+      },
+    );
+  });
+
+  // A transient OpenRouter /v1/models failure at run start used to zero ALL run
+  // metering (pricingFor in engine.js returns $0 on a catalog throw → the cap
+  // goes silently inert), and with no in-adapter cache the full long-tail list
+  // was re-fetched once per juror (sequential, 120s timeout each → a blackholed
+  // endpoint stalls a panel run's start for minutes). The adapter now caches
+  // for 1h and degrades a fetch failure to a usable catalog instead of throwing.
+  it("caches the live fetch for 1h; force re-fetches", async () => {
+    await withServer(
+      () => ({ body: { data: [{ id: "openai/gpt-4-turbo", name: "GPT-4 Turbo", context_length: 128000, pricing: { prompt: "0.00001", completion: "0.00003" }, supported_parameters: ["response_format"] }] } }),
+      async (srv) => {
+        const adapter = new OpenRouterAdapter({ apiKey: "k", baseUrl: srv.url });
+        const a = await adapter.catalog();
+        const b = await adapter.catalog();
+        assert.equal(srv.calls.length, 1, "second call within the TTL serves the in-adapter cache");
+        // cached reads are independent copies (a pricing mutation must not leak)
+        assert.deepEqual(a[0].pricing, b[0].pricing);
+        a[0].pricing.inUSDper1M = 999;
+        assert.equal(b[0].pricing.inUSDper1M, 10, "cache must hand out fresh pricing objects");
+        await adapter.catalog({ force: true });
+        assert.equal(srv.calls.length, 2, "force bypasses the cache");
+      },
+    );
+  });
+
+  it("a fetch failure returns a catalog instead of throwing (metering must not silently zero a whole run)", async () => {
+    await withServer(
+      () => ({ status: 503, body: "<html>down</html>" }),
+      async (srv) => {
+        const adapter = new OpenRouterAdapter({ apiKey: "k", baseUrl: srv.url });
+        const cat = await adapter.catalog(); // must NOT throw — engine.pricingFor depends on this
+        assert.ok(Array.isArray(cat), "fetch failure must degrade to an array, not propagate");
+      },
+    );
+  });
+
+  it("a fetch failure after a successful fetch serves the last-known catalog (no re-zeroing mid-run)", async () => {
+    let fail = false;
+    await withServer(
+      () => (fail
+        ? { status: 503, body: "<html>down</html>" }
+        : { body: { data: [{ id: "openai/gpt-4-turbo", name: "GPT-4 Turbo", context_length: 128000, pricing: { prompt: "0.00001", completion: "0.00003" }, supported_parameters: ["response_format"] }] } }),
+      async (srv) => {
+        const adapter = new OpenRouterAdapter({ apiKey: "k", baseUrl: srv.url });
+        const warm = await adapter.catalog();
+        assert.equal(warm[0].pricing.inUSDper1M, 10);
+        fail = true;
+        // force past the TTL cache so the fetch is actually attempted and fails
+        const cat = await adapter.catalog({ force: true });
+        assert.ok(Array.isArray(cat));
+        assert.equal(cat[0]?.pricing.inUSDper1M, 10, "last-known pricing survives a later fetch failure");
+      },
+    );
+  });
+});
+
+// ------------------------------------------------- PROVIDER_HTTP error detail
+
+describe("PROVIDER_HTTP error detail reaches the message", () => {
+  // Exact OpenRouter shape captured live: outer error.message is a
+  // generic "Provider returned error"; the upstream's real message hides
+  // inside error.metadata.raw as a JSON STRING.
+  const openrouterNested = {
+    error: {
+      message: "Provider returned error",
+      code: 400,
+      metadata: {
+        raw: JSON.stringify({
+          error: {
+            message: "Invalid schema for response_format 'emit': In context=(), 'required' is required to be supplied and to be an array including every key in properties. Missing 'confidence'.",
+            type: "invalid_request_error",
+            param: "response_format",
+            code: null,
+          },
+        }),
+        provider_name: "Azure",
+      },
+    },
+  };
+
+  it("surfaces OpenRouter's nested error.metadata.raw inner message; full body stays in details", async () => {
+    await withServer(
+      () => ({ status: 400, body: openrouterNested }),
+      async (srv) => {
+        await assert.rejects(
+          httpJSON("POST", `${srv.url}/v1/chat/completions`, { body: {} }),
+          (err) => {
+            assert.equal(err.code, "PROVIDER_HTTP");
+            assert.match(err.message, /→ HTTP 400 — Invalid schema for response_format 'emit'/);
+            assert.match(err.message, /Missing 'confidence'/);
+            assert.equal(err.details.status, 400);
+            assert.deepEqual(err.details.body, openrouterNested, "full body must remain in details");
+            return true;
+          },
+        );
+      },
+    );
+  });
+
+  it("plain error.message bodies (OpenAI/Anthropic shape) are appended", async () => {
+    await withServer(
+      () => ({ status: 400, body: { error: { message: "Unsupported parameter: max_completion_tokens", type: "invalid_request_error" } } }),
+      async (srv) => {
+        await assert.rejects(
+          httpJSON("POST", `${srv.url}/v1/x`, { body: {} }),
+          (err) => {
+            assert.match(err.message, /→ HTTP 400 — Unsupported parameter: max_completion_tokens$/);
+            return true;
+          },
+        );
+      },
+    );
+  });
+
+  it("a non-JSON metadata.raw string is used verbatim", async () => {
+    await withServer(
+      () => ({ status: 502, body: { error: { message: "Provider returned error", metadata: { raw: "upstream timed out after 90s" } } } }),
+      async (srv) => {
+        await assert.rejects(
+          httpJSON("POST", `${srv.url}/v1/x`, { body: {} }),
+          (err) => {
+            assert.match(err.message, /→ HTTP 502 — upstream timed out after 90s$/);
+            return true;
+          },
+        );
+      },
+    );
+  });
+
+  it("the extract is whitespace-collapsed and trimmed to ≤200 chars", async () => {
+    const long = `line one\n\n  line two ${"x".repeat(300)}`;
+    await withServer(
+      () => ({ status: 400, body: { error: { message: long } } }),
+      async (srv) => {
+        await assert.rejects(
+          httpJSON("POST", `${srv.url}/v1/x`, { body: {} }),
+          (err) => {
+            const extract = err.message.split(" — ")[1];
+            assert.ok(extract.length <= 200, `extract is ${extract.length} chars`);
+            assert.ok(extract.startsWith("line one line two"), "newlines collapsed to spaces");
+            assert.deepEqual(err.details.body.error.message, long, "details keep the untrimmed body");
+            return true;
+          },
+        );
+      },
+    );
+  });
+
+  it("bodies without an extractable message keep the bare HTTP message", async () => {
+    await withServer(
+      () => ({ status: 503, body: "<html>gateway</html>" }),
+      async (srv) => {
+        await assert.rejects(
+          httpJSON("GET", `${srv.url}/v1/x`, {}),
+          (err) => {
+            assert.ok(err.message.endsWith("→ HTTP 503"), err.message);
+            return true;
+          },
+        );
+      },
+    );
+    await withServer(
+      () => ({ status: 400, body: { error: { type: "invalid_request_error" } } }),
+      async (srv) => {
+        await assert.rejects(
+          httpJSON("GET", `${srv.url}/v1/x`, {}),
+          (err) => {
+            assert.ok(err.message.endsWith("→ HTTP 400"), err.message);
+            return true;
+          },
+        );
+      },
+    );
+  });
+});
+
+// ---------------------------------------------------------------- Ollama
+
+describe("OllamaAdapter", () => {
+  it("posts /api/chat with format json and options when schema present", async () => {
+    await withServer(
+      () => ({
+        body: {
+          model: "llama3.2:3b", message: { role: "assistant", content: '{"rationale":"r","label":"pay","confidence":0.6}' },
+          done: true, done_reason: "stop", prompt_eval_count: 50, eval_count: 10,
+        },
+      }),
+      async (srv) => {
+        const adapter = new OllamaAdapter({ baseUrl: srv.url });
+        const res = await adapter.complete({
+          model: "llama3.2:3b", messages: [{ role: "user", content: "x" }],
+          schema: judgeSchema, temperature: 0, maxTokens: 128, seed: 7,
+        });
+        const call = srv.calls[0];
+        assert.equal(call.url, "/api/chat");
+        assert.equal(call.body.format, "json");
+        assert.equal(call.body.stream, false);
+        assert.equal(call.body.options.temperature, 0);
+        assert.equal(call.body.options.seed, 7);
+        assert.equal(call.body.options.num_predict, 128);
+        assert.deepEqual(res.json, { rationale: "r", label: "pay", confidence: 0.6 });
+        assert.deepEqual(res.usage, { inputTokens: 50, outputTokens: 10 });
+        assert.equal(res.finishReason, "stop");
+        const caps = adapter.capabilities();
+        assert.equal(caps.local, true);
+        assert.equal(caps.family, "ollama");
+      },
+    );
+  });
+
+  it("fast-fails TRUNCATED when done_reason=length and the JSON is incomplete on a schema request", async () => {
+    // num_predict exhausted mid-JSON: done_reason "length", content cut off, so
+    // JSON.parse fails. Without truncation detection the repair loop re-prompts
+    // at the SAME num_predict and quarantines as SCHEMA_INVALID, starving the
+    // doubled-budget retry built for exactly this.
+    await withServer(
+      () => ({
+        body: {
+          model: "llama3.2:3b", message: { role: "assistant", content: '{"rationale":"the pay is ' },
+          done: true, done_reason: "length", prompt_eval_count: 50, eval_count: 128,
+        },
+      }),
+      async (srv) => {
+        const adapter = new OllamaAdapter({ baseUrl: srv.url });
+        await assert.rejects(
+          completeWithRepair(adapter, { model: "m", messages: [{ role: "user", content: "x" }], schema: judgeSchema, temperature: 0, maxTokens: 128 }),
+          (err) => err.code === "TRUNCATED" && /maxTokens/.test(err.message),
+        );
+        assert.equal(srv.calls.length, 1, "truncation must not trigger repair re-prompts");
+      },
+    );
+  });
+
+  it("done_reason=length with a COMPLETE, schema-valid JSON is not TRUNCATED (the limit was generous)", async () => {
+    await withServer(
+      () => ({
+        body: {
+          model: "llama3.2:3b", message: { role: "assistant", content: '{"rationale":"r","label":"pay","confidence":0.6}' },
+          done: true, done_reason: "length", prompt_eval_count: 50, eval_count: 30,
+        },
+      }),
+      async (srv) => {
+        const adapter = new OllamaAdapter({ baseUrl: srv.url });
+        const res = await adapter.complete({ model: "m", messages: [{ role: "user", content: "x" }], schema: judgeSchema, temperature: 0, maxTokens: 128 });
+        assert.deepEqual(res.json, { rationale: "r", label: "pay", confidence: 0.6 });
+        assert.equal(res.finishReason, "length");
+      },
+    );
+  });
+
+  it("done_reason=length WITHOUT a schema is not an error (plain text may be capped on purpose)", async () => {
+    await withServer(
+      () => ({ body: { message: { role: "assistant", content: "partial tex" }, done_reason: "length" } }),
+      async (srv) => {
+        const adapter = new OllamaAdapter({ baseUrl: srv.url });
+        const res = await adapter.complete({ model: "m", messages: [{ role: "user", content: "x" }], temperature: 0, maxTokens: 16 });
+        assert.equal(res.text, "partial tex");
+        assert.equal(res.finishReason, "length");
+      },
+    );
+  });
+
+  it("omits format without a schema", async () => {
+    await withServer(
+      () => ({ body: { message: { role: "assistant", content: "plain" }, done_reason: "stop" } }),
+      async (srv) => {
+        const adapter = new OllamaAdapter({ baseUrl: srv.url });
+        const res = await adapter.complete({ model: "m", messages: [{ role: "user", content: "x" }], temperature: 0.2, maxTokens: 32 });
+        assert.equal(srv.calls[0].body.format, undefined);
+        assert.equal(res.text, "plain");
+      },
+    );
+  });
+
+  it("builds catalog from /api/tags with zero pricing", async () => {
+    await withServer(
+      () => ({ body: { models: [{ name: "llama3.2:3b", digest: "abc123", details: { family: "llama" } }] } }),
+      async (srv) => {
+        const adapter = new OllamaAdapter({ baseUrl: srv.url });
+        const cat = await adapter.catalog();
+        assert.equal(srv.calls[0].url, "/api/tags");
+        assert.deepEqual(cat, [{
+          id: "llama3.2:3b", name: "llama3.2:3b", family: "llama", ctx: null,
+          pricing: { inUSDper1M: 0, outUSDper1M: 0 }, snapshot: "abc123",
+        }]);
+      },
+    );
+  });
+
+  it("discover: returns baseUrl when reachable, null when refused, null on timeout", async () => {
+    const live = await startServer(() => ({ body: { models: [] } }));
+    assert.equal(await OllamaAdapter.discover(live.url), live.url);
+    const deadUrl = live.url;
+    await live.close();
+    assert.equal(await OllamaAdapter.discover(deadUrl), null);
+
+    const hung = await startServer(() => null); // never responds
+    const t0 = Date.now();
+    assert.equal(await OllamaAdapter.discover(hung.url), null);
+    assert.ok(Date.now() - t0 < 2000, "discover timeout did not trip");
+    await hung.close();
+  });
+});
+
+// ---------------------------------------------------------------- malformed 200s
+
+describe("malformed 200 responses", () => {
+  const req = { model: "m", messages: [{ role: "user", content: "x" }], temperature: 0, maxTokens: 16 };
+
+  it("anthropic: 200 with empty body → PROVIDER_HTTP malformed, not TypeError", async () => {
+    await withServer(
+      () => ({ body: "" }),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        await assert.rejects(adapter.complete(req), (err) => {
+          assert.equal(err.name, "NexusIQError", `escaped as ${err.name}: ${err.message}`);
+          assert.equal(err.code, "PROVIDER_HTTP");
+          assert.match(err.message, /malformed response from anthropic/);
+          assert.equal(typeof err.details.body, "string");
+          return true;
+        });
+      },
+    );
+  });
+
+  it("openai: 200 with empty body → PROVIDER_HTTP malformed, not TypeError", async () => {
+    await withServer(
+      () => ({ body: "" }),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        await assert.rejects(adapter.complete(req), (err) => {
+          assert.equal(err.name, "NexusIQError", `escaped as ${err.name}: ${err.message}`);
+          assert.equal(err.code, "PROVIDER_HTTP");
+          assert.match(err.message, /malformed response from openai/);
+          return true;
+        });
+      },
+    );
+  });
+
+  it("ollama: 200 with empty body → PROVIDER_HTTP malformed, not TypeError", async () => {
+    await withServer(
+      () => ({ body: "" }),
+      async (srv) => {
+        const adapter = new OllamaAdapter({ baseUrl: srv.url });
+        await assert.rejects(adapter.complete(req), (err) => {
+          assert.equal(err.name, "NexusIQError", `escaped as ${err.name}: ${err.message}`);
+          assert.equal(err.code, "PROVIDER_HTTP");
+          assert.match(err.message, /malformed response from ollama/);
+          return true;
+        });
+      },
+    );
+  });
+
+  it("openai: 200 with HTML body (proxy splash) → PROVIDER_HTTP with a body snippet", async () => {
+    await withServer(
+      () => ({ body: "<html><body>gateway maintenance</body></html>" }),
+      async (srv) => {
+        const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
+        await assert.rejects(adapter.complete(req), (err) => {
+          assert.equal(err.code, "PROVIDER_HTTP");
+          assert.match(err.message, /malformed/);
+          assert.ok(String(err.details.body).includes("gateway maintenance"));
+          return true;
+        });
+      },
+    );
+  });
+
+  it("valid envelopes with absent usage/finish fields → zeros and 'stop', no throw", async () => {
+    await withServer(
+      () => ({ body: { content: [{ type: "text", text: "hi" }] } }),
+      async (srv) => {
+        const res = await new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url }).complete(req);
+        assert.deepEqual(res.usage, { inputTokens: 0, outputTokens: 0 });
+        assert.equal(res.finishReason, "stop");
+      },
+    );
+    await withServer(
+      () => ({ body: { choices: [{ index: 0, message: { role: "assistant", content: "hi" } }] } }),
+      async (srv) => {
+        const res = await new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url }).complete(req);
+        assert.deepEqual(res.usage, { inputTokens: 0, outputTokens: 0 });
+        assert.equal(res.finishReason, "stop");
+      },
+    );
+    await withServer(
+      () => ({ body: { message: { role: "assistant", content: "hi" } } }),
+      async (srv) => {
+        const res = await new OllamaAdapter({ baseUrl: srv.url }).complete(req);
+        assert.deepEqual(res.usage, { inputTokens: 0, outputTokens: 0 });
+        assert.equal(res.finishReason, "stop");
+      },
+    );
+  });
+});
+
+// ---------------------------------------------------------------- truncation retry
+
+// Shared by EVERY structured caller (Director AND judges): TRUNCATED is
+// deterministic at a given budget, so retry exactly once at a doubled budget,
+// clamped to the caller's cap. Lives in the provider layer so judges do not
+// import director code.
+describe("withTruncationRetry (provider layer)", () => {
+  it("retries TRUNCATED once at a doubled budget (default cap 32768)", async () => {
+    const calls = [];
+    const r = await withTruncationRetry(async (mt) => {
+      calls.push(mt);
+      if (calls.length === 1) throw new NexusIQError("TRUNCATED", "structured output truncated");
+      return { ok: mt };
+    }, { maxTokens: 4096 });
+    assert.deepEqual(calls, [4096, 8192], "second attempt doubles the budget");
+    assert.equal(r.ok, 8192);
+  });
+
+  it("honors a caller-supplied cap (judges pass 8192)", async () => {
+    const calls = [];
+    await withTruncationRetry(async (mt) => {
+      calls.push(mt);
+      if (calls.length === 1) throw new NexusIQError("TRUNCATED", "x");
+      return {};
+    }, { maxTokens: 6000, cap: 8192 });
+    assert.deepEqual(calls, [6000, 8192], "doubling clamps to the cap");
+  });
+
+  it("at the cap there is nothing larger to try: TRUNCATED propagates after ONE call", async () => {
+    const calls = [];
+    await assert.rejects(
+      () => withTruncationRetry(async (mt) => { calls.push(mt); throw new NexusIQError("TRUNCATED", "at cap"); }, { maxTokens: 8192, cap: 8192 }),
+      (e) => e.code === "TRUNCATED",
+    );
+    assert.equal(calls.length, 1);
+  });
+
+  it("non-truncation errors never retry", async () => {
+    const calls = [];
+    await assert.rejects(
+      () => withTruncationRetry(async (mt) => { calls.push(mt); throw new NexusIQError("PROVIDER_HTTP", "boom"); }, { maxTokens: 4096 }),
+      (e) => e.code === "PROVIDER_HTTP",
+    );
+    assert.equal(calls.length, 1);
+  });
+});
+
+// ---------------------------------------------------------------- schema repair
+
+describe("completeWithRepair", () => {
+  it("re-prompts once on invalid JSON, then succeeds", async () => {
+    const adapter = scriptedAdapter([
+      "this is not json at all",
+      '{"rationale":"fixed","label":"pay","confidence":0.9}',
+    ]);
+    const req = { model: "m", messages: [{ role: "user", content: "judge it" }], schema: judgeSchema, temperature: 0, maxTokens: 64 };
+    const res = await completeWithRepair(adapter, req, { maxRepairs: 1 });
+    assert.equal(res.json.label, "pay");
+    assert.equal(res.repairs, 1);
+    assert.equal(adapter.calls.length, 2);
+    const second = adapter.calls[1].messages;
+    assert.equal(second.length, 3);
+    assert.deepEqual(second[1], { role: "assistant", content: "this is not json at all" });
+    assert.equal(second[2].role, "user");
+    assert.ok(second[2].content.includes("previous response was not valid JSON for the required schema"));
+    assert.ok(second[2].content.includes('"label"'), "repair prompt restates the schema");
+    // original request object untouched
+    assert.equal(req.messages.length, 1);
+  });
+
+  it("throws SCHEMA_INVALID when repairs are exhausted", async () => {
+    const adapter = scriptedAdapter(["nope", "still nope"]);
+    await assert.rejects(
+      completeWithRepair(adapter, { model: "m", messages: [{ role: "user", content: "x" }], schema: judgeSchema, temperature: 0, maxTokens: 64 }, { maxRepairs: 1 }),
+      (err) => err.code === "SCHEMA_INVALID" && err.details.problems.length > 0,
+    );
+    assert.equal(adapter.calls.length, 2);
+
+    const adapter3 = scriptedAdapter(["nope"]);
+    await assert.rejects(
+      completeWithRepair(adapter3, { model: "m", messages: [{ role: "user", content: "x" }], schema: judgeSchema, temperature: 0, maxTokens: 64 }),
+      { code: "SCHEMA_INVALID" },
+    );
+    assert.equal(adapter3.calls.length, 3); // default maxRepairs = 2
+  });
+
+  it("validates content, not just parseability; strips code fences", async () => {
+    const adapter = scriptedAdapter([
+      '{"rationale":"r","label":"NOT_A_LABEL","confidence":0.5}',
+      '```json\n{"rationale":"r","label":"workload","confidence":0.5}\n```',
+    ]);
+    const res = await completeWithRepair(adapter, { model: "m", messages: [{ role: "user", content: "x" }], schema: judgeSchema, temperature: 0, maxTokens: 64 });
+    assert.equal(res.json.label, "workload");
+    assert.equal(res.repairs, 1);
+  });
+
+  it("passes through when the adapter already returned valid json (repairs: 0)", async () => {
+    const mock = new MockAdapter();
+    const res = await completeWithRepair(mock, {
+      model: "mock-1",
+      messages: [{ role: "user", content: "Label.\n<unit>The pay is awful here.</unit>" }],
+      schema: judgeSchema, temperature: 0, maxTokens: 64,
+    });
+    assert.equal(res.repairs, 0);
+    assert.deepEqual(validateSchema(res.json, judgeSchema), []);
+  });
+
+  it("validateSchema treats type-omitted schemas with properties as objects (Director-generated)", () => {
+    const noType = {
+      properties: {
+        label: { type: "string", enum: ["a", "b"] },
+        n: { type: "integer" },
+      },
+      required: ["label"],
+      additionalProperties: false,
+    };
+    assert.deepEqual(validateSchema({ label: "a", n: 2 }, noType), []);
+    assert.ok(validateSchema({}, noType).length > 0, "missing required key must be flagged");
+    assert.ok(validateSchema({ label: "a", extra: 1 }, noType).length > 0, "extra key must be flagged");
+    assert.ok(validateSchema("not an object", noType).length > 0, "non-object must be flagged");
+  });
+
+  it("validateSchema catches type, enum, required, range, extra keys", () => {
+    assert.deepEqual(validateSchema({ rationale: "r", label: "pay", confidence: 0.5 }, judgeSchema), []);
+    assert.ok(validateSchema({ rationale: "r", label: "zzz", confidence: 0.5 }, judgeSchema).length > 0);
+    assert.ok(validateSchema({ rationale: "r", label: "pay" }, judgeSchema).length > 0);
+    assert.ok(validateSchema({ rationale: "r", label: "pay", confidence: "high" }, judgeSchema).length > 0);
+    assert.ok(validateSchema({ rationale: "r", label: "pay", confidence: 1.5 }, judgeSchema).length > 0);
+    assert.ok(validateSchema({ rationale: "r", label: "pay", confidence: 0.5, extra: 1 }, judgeSchema).length > 0);
+    assert.ok(validateSchema("not an object", judgeSchema).length > 0);
+  });
+});
+
+// ---------------------------------------------------------------- registry / privacy
+
+describe("registry privacy gates", () => {
+  const noKeys = join(tmpdir(), "nexus-iq-definitely-missing", "keys.json");
+
+  it("strict blocks network adapters with zero fetches; locals pass", () => {
+    const realFetch = globalThis.fetch;
+    let fetches = 0;
+    globalThis.fetch = () => { fetches++; throw new Error("network blocked by test"); };
+    try {
+      const strict = { privacyMode: "strict" };
+      for (const name of ["anthropic", "openai", "openrouter"]) {
+        assert.throws(() => getAdapter(strict, name, { keysPath: noKeys }), { code: "PRIVACY_BLOCKED" });
+      }
+      assert.equal(fetches, 0);
+      const m = getAdapter(strict, "mock", { keysPath: noKeys });
+      assert.ok(m.adapter instanceof MockAdapter);
+      assert.equal(m.ledgerEvent, null);
+      const o = getAdapter(strict, "ollama", { keysPath: noKeys });
+      assert.ok(o.adapter instanceof OllamaAdapter);
+      assert.equal(o.ledgerEvent, null);
+      assert.equal(fetches, 0);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("no-training: allowlist passes, openrouter needs a justification", () => {
+    const proj = { privacyMode: "no-training" };
+    const a = getAdapter(proj, "anthropic", { keysPath: noKeys });
+    assert.ok(a.adapter instanceof AnthropicAdapter);
+    assert.equal(a.ledgerEvent, null);
+    assert.equal(getAdapter(proj, "openai", { keysPath: noKeys }).ledgerEvent, null);
+
+    assert.throws(() => getAdapter(proj, "openrouter", { keysPath: noKeys }), { code: "PRIVACY_BLOCKED" });
+    assert.throws(() => getAdapter(proj, "openrouter", { keysPath: noKeys, justification: "   " }), { code: "PRIVACY_BLOCKED" });
+
+    const ok = getAdapter(proj, "openrouter", { keysPath: noKeys, justification: "EU data-residency requirement" });
+    assert.ok(ok.adapter instanceof OpenRouterAdapter);
+    assert.deepEqual(ok.ledgerEvent, {
+      actor: "human",
+      type: "privacy.override",
+      refs: { provider: "openrouter" },
+      payload: { justification: "EU data-residency requirement" },
+    });
+  });
+
+  it("open allows anything without ledger events", () => {
+    const proj = { privacyMode: "open" };
+    for (const name of ["anthropic", "openai", "openrouter", "ollama", "mock"]) {
+      const { adapter, ledgerEvent } = getAdapter(proj, name, { keysPath: noKeys });
+      assert.ok(adapter instanceof Adapter);
+      assert.equal(ledgerEvent, null);
+    }
+  });
+
+  it("unknown provider → CONFIG_MISSING; unknown privacy mode fails closed", () => {
+    assert.throws(() => getAdapter({ privacyMode: "open" }, "geminiz", { keysPath: noKeys }), { code: "CONFIG_MISSING" });
+    assert.throws(() => getAdapter({ privacyMode: "paranoid" }, "anthropic", { keysPath: noKeys }), { code: "PRIVACY_BLOCKED" });
+  });
+
+  it("missing or null privacyMode fails closed, even for local adapters", () => {
+    assert.throws(
+      () => getAdapter({}, "mock", { keysPath: noKeys }),
+      (err) => err.code === "PRIVACY_BLOCKED" && /missing/i.test(err.message),
+    );
+    assert.throws(
+      () => getAdapter({ privacyMode: null }, "mock", { keysPath: noKeys }),
+      (err) => err.code === "PRIVACY_BLOCKED" && /missing/i.test(err.message),
+    );
+  });
+
+  it("does not export the raw PROVIDERS constructor map", () => {
+    assert.equal("PROVIDERS" in registry, false, "PROVIDERS must be module-private; getAdapter is the only sanctioned path");
+  });
+
+  it("reads keys.json (object or string entries); absent file → keyless adapter that still catalogs", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nexus-iq-keys-"));
+    try {
+      const keysPath = join(dir, "keys.json");
+      writeFileSync(keysPath, JSON.stringify({
+        anthropic: { apiKey: "sk-ant-aaa", baseUrl: "http://127.0.0.1:1" },
+        openai: "sk-oai-flat",
+      }));
+      const a = getAdapter({ privacyMode: "open" }, "anthropic", { keysPath }).adapter;
+      assert.equal(a.apiKey, "sk-ant-aaa");
+      assert.equal(a.baseUrl, "http://127.0.0.1:1");
+      const o = getAdapter({ privacyMode: "open" }, "openai", { keysPath }).adapter;
+      assert.equal(o.apiKey, "sk-oai-flat");
+
+      const keyless = getAdapter({ privacyMode: "open" }, "anthropic", { keysPath: noKeys }).adapter;
+      assert.equal(keyless.apiKey, null);
+      await assert.rejects(
+        keyless.complete({ model: "m", messages: [{ role: "user", content: "x" }], temperature: 0, maxTokens: 8 }),
+        { code: "CONFIG_MISSING" },
+      );
+      assert.equal((await keyless.catalog()).length, 3);
+
+      writeFileSync(keysPath, "{ not json");
+      assert.throws(() => getAdapter({ privacyMode: "open" }, "anthropic", { keysPath }), { code: "CONFIG_MISSING" });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------- registry cache
+
+describe("registry adapter cache", () => {
+  const noKeys = join(tmpdir(), "nexus-iq-definitely-missing", "keys.json");
+  const open = { privacyMode: "open" };
+
+  it("memoizes instances: mock oracle state survives across getAdapter calls; clearAdapterCache forces a new one", () => {
+    registry.clearAdapterCache();
+    const first = getAdapter(open, "mock", { keysPath: noKeys }).adapter;
+    first.setOracle(() => "pay");
+    const second = getAdapter(open, "mock", { keysPath: noKeys }).adapter;
+    assert.equal(second, first, "expected the same memoized instance (oracle state must survive)");
+    assert.equal(typeof second.oracle, "function");
+    registry.clearAdapterCache();
+    const third = getAdapter(open, "mock", { keysPath: noKeys }).adapter;
+    assert.notEqual(third, first, "clearAdapterCache must force a new instance");
+    assert.equal(third.oracle, null);
+  });
+
+  it("privacy gates run on EVERY call: strict blocked even when the adapter is already cached", () => {
+    registry.clearAdapterCache();
+    const cached = getAdapter(open, "anthropic", { keysPath: noKeys }).adapter;
+    assert.ok(cached instanceof AnthropicAdapter, "open project constructs (and caches) the adapter");
+    assert.throws(
+      () => getAdapter({ privacyMode: "strict" }, "anthropic", { keysPath: noKeys }),
+      { code: "PRIVACY_BLOCKED" },
+      "a strict project must be blocked even though the adapter is already cached",
+    );
+    assert.throws(
+      () => getAdapter({ privacyMode: "no-training" }, "openrouter", { keysPath: noKeys }),
+      { code: "PRIVACY_BLOCKED" },
+    );
+  });
+
+  it("cache key includes keysPath and resolved baseUrl: a baseUrl change busts the cache", () => {
+    const dir = mkdtempSync(join(tmpdir(), "nexus-iq-cache-"));
+    try {
+      const keysPath = join(dir, "keys.json");
+      writeFileSync(keysPath, JSON.stringify({ ollama: { baseUrl: "http://127.0.0.1:1111" } }));
+      registry.clearAdapterCache();
+      const a = getAdapter(open, "ollama", { keysPath }).adapter;
+      assert.equal(getAdapter(open, "ollama", { keysPath }).adapter, a);
+      writeFileSync(keysPath, JSON.stringify({ ollama: { baseUrl: "http://127.0.0.1:2222" } }));
+      const b = getAdapter(open, "ollama", { keysPath }).adapter;
+      assert.notEqual(b, a, "baseUrl change must produce a fresh instance");
+      assert.equal(b.baseUrl, "http://127.0.0.1:2222");
+      // different keysPath → different instance even for the same provider
+      const c = getAdapter(open, "ollama", { keysPath: noKeys }).adapter;
+      assert.notEqual(c, b);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------- MockAdapter
+
+const THEMES = ["pay", "management", "workload", "growth"];
+const themeSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["rationale", "label", "confidence"],
+  properties: {
+    rationale: { type: "string" },
+    label: { type: "string", enum: THEMES },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+  },
+};
+
+function plantedUnits(n) {
+  return Array.from({ length: n }, (_, i) => {
+    const theme = THEMES[i % THEMES.length];
+    return { theme, text: `Unit ${i}: my main issue is ${theme}; it shapes how I feel about this job every single day.` };
+  });
+}
+const judgeReq = (text) => ({
+  model: "mock-1",
+  messages: [{ role: "user", content: `Apply the codebook.\n<unit>${text}</unit>\nReturn JSON.` }],
+  schema: themeSchema, temperature: 0, maxTokens: 120,
+});
+const oracle = (unitText) => THEMES.find((t) => unitText.includes(`issue is ${t}`)) ?? "pay";
+
+describe("MockAdapter", () => {
+  it("is byte-deterministic for identical (model, messages)", async () => {
+    const req = judgeReq("The pay is terrible and management ignores us.");
+    const r1 = await new MockAdapter().complete(req);
+    const r2 = await new MockAdapter().complete(structuredClone(req));
+    const r3 = await new MockAdapter().complete(req); // fresh adapter, same request
+    assert.equal(JSON.stringify(r1), JSON.stringify(r2));
+    assert.equal(JSON.stringify(r1), JSON.stringify(r3));
+    const other = await new MockAdapter().complete(judgeReq("Completely different unit about workload."));
+    assert.notEqual(JSON.stringify(r1), JSON.stringify(other));
+  });
+
+  it("req.seed perturbs output (stability checks must not be vacuous); same seed reproduces byte-identically", async () => {
+    const req = judgeReq("The pay is terrible and management ignores us.");
+    const a1 = await new MockAdapter().complete({ ...req, seed: 1 });
+    const a2 = await new MockAdapter().complete({ ...req, seed: 1 });
+    const b = await new MockAdapter().complete({ ...req, seed: 2 });
+    assert.equal(JSON.stringify(a1), JSON.stringify(a2), "same seed must reproduce byte-identically");
+    assert.notEqual(JSON.stringify(a1.json), JSON.stringify(b.json), "different seeds must decorrelate outputs");
+    // both seeds still emit schema-valid judgments
+    assert.deepEqual(validateSchema(a1.json, themeSchema), []);
+    assert.deepEqual(validateSchema(b.json, themeSchema), []);
+  });
+
+  it("outputTokens never exceed the maxTokens-derived target", async () => {
+    const units = plantedUnits(60);
+    const outs = await Promise.all(units.map((u) => new MockAdapter().complete(judgeReq(u.text))));
+    for (const r of outs) {
+      assert.ok(r.usage.outputTokens <= 120, `outputTokens ${r.usage.outputTokens} > maxTokens 120`);
+      assert.ok(r.usage.outputTokens >= 1);
+    }
+  });
+
+  it("emits schema-valid JSON with confidence in [0.55, 0.99] and a rationale quoting the unit", async () => {
+    const mock = new MockAdapter();
+    const unit = "The pay is terrible and management ignores us completely.";
+    const res = await mock.complete(judgeReq(unit));
+    assert.deepEqual(validateSchema(res.json, themeSchema), []);
+    assert.ok(res.json.confidence >= 0.55 && res.json.confidence <= 0.99, `confidence ${res.json.confidence}`);
+    const quoted = res.json.rationale.match(/"([^"]+)"/);
+    assert.ok(quoted, "rationale contains a quoted snippet");
+    assert.ok(unit.includes(quoted[1]), `snippet "${quoted[1]}" comes from the unit text`);
+    assert.equal(res.text, JSON.stringify(res.json));
+    assert.equal(res.servedBy, "mock");
+    assert.deepEqual(mock.capabilities(), { structuredOutput: true, pinning: true, batch: false, local: true, family: "mock" });
+    const cat = await mock.catalog();
+    assert.deepEqual(cat[0].pricing, { inUSDper1M: 0, outUSDper1M: 0 });
+    assert.equal(cat[0].family, "mock");
+  });
+
+  it("continuous (numeric) label with no oracle emits a valid number, not a string (no 100% quarantine)", async () => {
+    // A continuous construct: label is a bounded number, no enum. Keyless
+    // demo/CI runs it with no oracle. The mock used to fall back to a STRING
+    // snippet for any oracle-less label, so every attempt failed schema
+    // validation → 100% of units quarantined. It must emit a number in range.
+    const continuousSchema = {
+      type: "object",
+      additionalProperties: false,
+      required: ["rationale", "label", "confidence"],
+      properties: {
+        rationale: { type: "string" },
+        label: { type: "number", minimum: 0, maximum: 100 }, // score0to100, no enum, no oracle
+        confidence: { type: "number", minimum: 0, maximum: 1 },
+      },
+    };
+    const mock = new MockAdapter(); // no oracle set
+    const units = plantedUnits(50);
+    const out = await Promise.all(units.map((u) => mock.complete({
+      model: "mock-1",
+      messages: [{ role: "user", content: `Score it.\n<unit>${u.text}</unit>` }],
+      schema: continuousSchema, temperature: 0, maxTokens: 120,
+    })));
+    const invalid = out.filter((r) => validateSchema(r.json, continuousSchema).length > 0).length;
+    assert.equal(invalid, 0, `${invalid}/50 continuous-label emissions failed schema validation`);
+    for (const r of out) {
+      assert.equal(typeof r.json.label, "number");
+      assert.ok(r.json.label >= 0 && r.json.label <= 100, `label ${r.json.label} out of [0,100]`);
+    }
+  });
+
+  it("an integer-typed label with no oracle also emits a valid number", async () => {
+    const intSchema = {
+      type: "object",
+      additionalProperties: false,
+      required: ["label"],
+      properties: { label: { type: "integer", minimum: 1, maximum: 5 } }, // Likert, no enum
+    };
+    const mock = new MockAdapter();
+    const res = await mock.complete({
+      model: "mock-1", messages: [{ role: "user", content: "<unit>some text</unit>" }],
+      schema: intSchema, temperature: 0, maxTokens: 64,
+    });
+    assert.deepEqual(validateSchema(res.json, intSchema), []);
+    assert.ok(Number.isInteger(res.json.label));
+  });
+
+  it("an oracle supplying a numeric label is still honored (agreement path)", async () => {
+    const continuousSchema = {
+      type: "object", additionalProperties: false, required: ["label"],
+      properties: { label: { type: "number", minimum: 0, maximum: 100 } },
+    };
+    const mock = new MockAdapter().setOracle(() => 42).setAccuracy(1.0);
+    const res = await mock.complete({
+      model: "mock-1", messages: [{ role: "user", content: "<unit>x</unit>" }],
+      schema: continuousSchema, temperature: 0, maxTokens: 64,
+    });
+    assert.equal(res.json.label, 42, "a numeric oracle value must pass through on agreement");
+    assert.deepEqual(validateSchema(res.json, continuousSchema), []);
+  });
+
+  it("fills arbitrary schema shapes", async () => {
+    const wide = {
+      type: "object",
+      required: ["labels", "salient", "count"],
+      properties: {
+        labels: { type: "array", items: { type: "string", enum: ["a", "b", "c"] } },
+        salient: { type: "boolean" },
+        count: { type: "integer", minimum: 0, maximum: 5 },
+      },
+    };
+    const res = await new MockAdapter().complete({
+      model: "mock-1", messages: [{ role: "user", content: "<unit>some text here</unit>" }],
+      schema: wide, temperature: 0, maxTokens: 64,
+    });
+    assert.deepEqual(validateSchema(res.json, wide), []);
+  });
+
+  it("agrees with the oracle 100% at accuracy 1.0 (200 units)", async () => {
+    const mock = new MockAdapter().setOracle(oracle).setAccuracy(1.0);
+    const units = plantedUnits(200);
+    const out = await Promise.all(units.map((u) => mock.complete(judgeReq(u.text))));
+    const agree = out.filter((r, i) => r.json.label === units[i].theme).length;
+    assert.equal(agree, 200);
+  });
+
+  it("agrees within [0.7, 0.9] at accuracy 0.8 (500 units)", async () => {
+    const mock = new MockAdapter().setOracle(oracle).setAccuracy(0.8);
+    const units = plantedUnits(500);
+    const out = await Promise.all(units.map((u) => mock.complete(judgeReq(u.text))));
+    const rate = out.filter((r, i) => r.json.label === units[i].theme).length / units.length;
+    assert.ok(rate >= 0.7 && rate <= 0.9, `agreement ${rate}`);
+    // disagreements still emit valid labels
+    for (const r of out) assert.ok(THEMES.includes(r.json.label));
+  });
+
+  it("single-value enum forces agreement: schema-valid even when the judge would disagree (200 units, accuracy 0.5)", async () => {
+    const singleEnumSchema = {
+      type: "object",
+      additionalProperties: false,
+      required: ["rationale", "label", "confidence"],
+      properties: {
+        rationale: { type: "string" },
+        label: { type: "string", enum: ["pay"] },
+        confidence: { type: "number", minimum: 0, maximum: 1 },
+      },
+    };
+    const mock = new MockAdapter().setOracle(() => "pay").setAccuracy(0.5);
+    const units = plantedUnits(200);
+    const out = await Promise.all(units.map((u) => mock.complete({
+      model: "mock-1",
+      messages: [{ role: "user", content: `Apply the codebook.\n<unit>${u.text}</unit>\nReturn JSON.` }],
+      schema: singleEnumSchema, temperature: 0, maxTokens: 120,
+    })));
+    const invalid = out.filter((r) => validateSchema(r.json, singleEnumSchema).length > 0).length;
+    assert.equal(invalid, 0, `${invalid}/200 emissions violate the single-value enum`);
+    for (const r of out) assert.equal(r.json.label, "pay");
+  });
+
+  it("confidence skews higher on agreement", async () => {
+    const mock = new MockAdapter().setOracle(oracle).setAccuracy(0.5);
+    const units = plantedUnits(400);
+    const out = await Promise.all(units.map((u) => mock.complete(judgeReq(u.text))));
+    const agreeConf = [], disConf = [];
+    out.forEach((r, i) => (r.json.label === units[i].theme ? agreeConf : disConf).push(r.json.confidence));
+    const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    assert.ok(agreeConf.length > 50 && disConf.length > 50, "both outcomes well represented");
+    assert.ok(mean(agreeConf) > mean(disConf) + 0.05, `agree ${mean(agreeConf).toFixed(3)} vs disagree ${mean(disConf).toFixed(3)}`);
+  });
+
+  it("handler hook scripts Director-style responses", async () => {
+    const mock = new MockAdapter();
+    let seen = null;
+    mock.setHandler("brief", (req) => { seen = req; return { sections: [{ md: "# Brief", refs: ["u_1"] }] }; });
+    const res = await mock.complete({
+      model: "mock-1",
+      messages: [
+        { role: "system", content: "You are the Director. [[handler:brief]]" },
+        { role: "user", content: "Write the brief." },
+      ],
+      temperature: 0, maxTokens: 500,
+    });
+    assert.deepEqual(res.json, { sections: [{ md: "# Brief", refs: ["u_1"] }] });
+    assert.equal(res.text, JSON.stringify(res.json));
+    assert.equal(seen.model, "mock-1");
+  });
+
+  it("latency is small and usage tracks chars/3.6 in, maxTokens-ish out", async () => {
+    const mock = new MockAdapter();
+    const req = judgeReq("The pay is terrible and management ignores us completely.");
+    const chars = req.messages.reduce((n, m) => n + m.content.length, 0);
+    const t0 = performance.now();
+    const res = await mock.complete(req);
+    const dt = performance.now() - t0;
+    assert.ok(dt >= 4 && dt < 250, `latency ${dt}ms`);
+    assert.ok(Math.abs(res.usage.inputTokens - chars / 3.6) <= chars / 3.6 * 0.1 + 1, `inputTokens ${res.usage.inputTokens} vs chars/3.6 ${chars / 3.6}`);
+    assert.ok(res.usage.outputTokens >= 120 * 0.84 && res.usage.outputTokens <= 120 * 1.16, `outputTokens ${res.usage.outputTokens}`);
+  });
+});
+
+// ---------------------------------------------------------------- costs
+
+describe("costs", () => {
+  it("estimateRun arithmetic", () => {
+    const est = estimateRun({
+      units: Array.from({ length: 10 }, () => "x".repeat(36)),
+      template: "t".repeat(144),
+      maxTokens: 100,
+      pricing: { inUSDper1M: 3, outUSDper1M: 15 },
+      callsPerUnit: 2,
+    });
+    assert.equal(est.calls, 20);
+    assert.equal(est.inputTokens, 1000); // 20 × (144+36)/3.6
+    assert.equal(est.outputTokens, 2000);
+    assert.equal(est.estUSD, 0.033);
+    assert.ok(est.etaMinutes > 0);
+  });
+
+  it("meter accumulates tokens and dollars", () => {
+    const m = meter();
+    let t = m.add({ inputTokens: 1_000_000, outputTokens: 0 }, { inUSDper1M: 3, outUSDper1M: 15 });
+    assert.deepEqual(t, { inputTokens: 1_000_000, outputTokens: 0, usd: 3 });
+    t = m.add({ inputTokens: 0, outputTokens: 200_000 }, { inUSDper1M: 3, outUSDper1M: 15 });
+    assert.equal(t.usd, 6);
+    assert.deepEqual(m.totals(), { inputTokens: 1_000_000, outputTokens: 200_000, usd: 6 });
+  });
+
+  it("checkBudget throws BUDGET_EXCEEDED at/over the cap, never under or capless", () => {
+    checkBudget(4.99, 5);
+    checkBudget(123, null);
+    checkBudget(123, undefined);
+    assert.throws(() => checkBudget(5, 5), { code: "BUDGET_EXCEEDED" });
+    assert.throws(() => checkBudget(5.01, 5), { code: "BUDGET_EXCEEDED" });
+  });
+
+  it("estimateRun lands within ±15% of mock actuals on a 1000-unit corpus", async () => {
+    const rng = mulberry32(42);
+    const words = ["pay", "shift", "manager", "team", "hours", "respect", "training", "growth", "tired", "schedule", "benefits", "praise"];
+    const units = Array.from({ length: 1000 }, () => {
+      const n = 8 + Math.floor(rng() * 30);
+      return Array.from({ length: n }, () => words[Math.floor(rng() * words.length)]).join(" ");
+    });
+    const template = "You are a careful judge. Apply the codebook to the unit.\n<unit>{{unit}}</unit>\nReturn JSON with rationale, label, confidence.";
+    const maxTokens = 120;
+
+    const est = estimateRun({ units, template, maxTokens, pricing: { inUSDper1M: 0, outUSDper1M: 0 } });
+    assert.equal(est.calls, 1000);
+    assert.equal(est.estUSD, 0);
+
+    const mock = new MockAdapter().setOracle(() => "pay");
+    const m = meter();
+    await Promise.all(units.map(async (text) => {
+      const res = await mock.complete({
+        model: "mock-1",
+        messages: [{ role: "user", content: template.replace("{{unit}}", text) }],
+        schema: themeSchema, temperature: 0, maxTokens,
+      });
+      m.add(res.usage, { inUSDper1M: 0, outUSDper1M: 0 });
+    }));
+    const actual = m.totals();
+    assert.equal(actual.usd, 0);
+    const inRatio = est.inputTokens / actual.inputTokens;
+    const outRatio = est.outputTokens / actual.outputTokens;
+    assert.ok(inRatio > 0.85 && inRatio < 1.15, `input est/actual = ${inRatio.toFixed(3)}`);
+    assert.ok(outRatio > 0.85 && outRatio < 1.15, `output est/actual = ${outRatio.toFixed(3)}`);
+  });
+});
