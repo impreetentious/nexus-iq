@@ -1,6 +1,6 @@
 {
   "name": "nexus-iq",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "description": "Nexus IQ – qualitative text measurement platform built with Next.js.",
   "type": "module",
   "private": false,
@@ -15,7 +15,7 @@
     "server": "node server/index.js",
     "build": "npm run next:build",
     "start": "concurrently \"npm run next:start\" \"npm run server\"",
-    "test": "node --test tests/unit/*.test.js"
+    "test": "node --test tests/unit/*.test.js tests/integration/*.test.js tests/server/*.test.js tests/sim/*.test.js"
   },
   "dependencies": {
     "busboy": "^1.6.0",
