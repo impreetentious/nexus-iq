@@ -12,13 +12,16 @@
 // generator's exported function (seeded — deterministic content, no files).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { startServer } from "../../server/index.js";
 import { getAdapter } from "../../server/providers/registry.js";
 import { generate, toCsv } from "../../demo/generate.js";
+
+const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 let tmpProjects;
 let tmpConfig;
@@ -124,8 +127,8 @@ test("perf: Instant Read compute on the 10k corpus < 30s", async () => {
 });
 
 test("perf: full-corpus dictionary run via the engine on the demo corpus (2,500 units) < 10s", async () => {
-  // The seeded demo corpus, through the same import the demo uses.
-  const csv = toCsv(generate({}).rows);
+  // the COMMITTED demo corpus, through the same import the demo uses
+  const csv = await readFile(path.join(repoRoot, "demo", "techcorp-exit-survey.csv"), "utf8");
   const up = await upload(`/api/projects/${S.slug}/import`, "techcorp-exit-survey.csv", csv);
   const confirmed = await ok("POST", `/api/projects/${S.slug}/import/confirm`, {
     importId: up.importId,

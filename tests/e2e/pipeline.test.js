@@ -34,18 +34,20 @@
 //     accuracy 0.9, which is what the planted-rate arithmetic below assumes.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { unzipSync, strFromU8 } from "fflate";
 
 import { startServer } from "../../server/index.js";
 import { getAdapter } from "../../server/providers/registry.js";
-import { generate, toCsv } from "../../demo/generate.js";
 import { readNdjson, projectDir } from "../../server/core/store.js";
 import * as ledger from "../../server/core/ledger.js";
 import { sha256 } from "../../server/core/ids.js";
 import { mulberry32 } from "../../server/core/rng.js";
+
+const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 // ---------------------------------------------------------------- harness
 
@@ -65,10 +67,9 @@ before(async () => {
   for (const name of ["openrouter", "ollama"]) {
     getAdapter({ privacyMode: "open" }, name).adapter.catalog = async () => [];
   }
-  // Generate the seeded corpus and planted truth without requiring deployment fixtures.
-  const { rows, oracle } = generate({});
-  S.csv = toCsv(rows);
-  S.oracleDoc = { rows: oracle };
+  // the committed demo corpus + its planted truth
+  S.csv = await readFile(path.join(repoRoot, "demo", "techcorp-exit-survey.csv"), "utf8");
+  S.oracleDoc = JSON.parse(await readFile(path.join(repoRoot, "demo", "oracle.json"), "utf8"));
 });
 
 after(async () => {

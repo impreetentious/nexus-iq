@@ -11,13 +11,15 @@
 // shapes are covered by tests/unit/routes.test.js.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { startServer } from "../../server/index.js";
 import { getAdapter } from "../../server/providers/registry.js";
-import { generate, toCsv } from "../../demo/generate.js";
+
+const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 // ---------------------------------------------------------------- harness
 
@@ -37,10 +39,10 @@ before(async () => {
   for (const name of ["openrouter", "ollama"]) {
     getAdapter({ privacyMode: "open" }, name).adapter.catalog = async () => [];
   }
-  // Use the first 200 seeded rows and their planted truth, independent of deployment fixtures.
-  const { rows, oracle } = generate({});
-  S.csv = toCsv(rows.slice(0, 200));
-  S.oracleDoc = { rows: oracle };
+  // a 200-row slice of the committed demo CSV + its planted truth
+  const csv = await readFile(path.join(repoRoot, "demo", "techcorp-exit-survey.csv"), "utf8");
+  S.csv = csv.split("\n").slice(0, 201).join("\n") + "\n";
+  S.oracleDoc = JSON.parse(await readFile(path.join(repoRoot, "demo", "oracle.json"), "utf8"));
 });
 
 after(async () => {
