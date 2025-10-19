@@ -4,8 +4,7 @@ services:
   app:
     build: .
     ports:
-      - "3000:3000"
-      - "7341:7341"
+      - "127.0.0.1:3000:3000"
     environment:
       NXQ_PORT: "7341"
-    command: npm run start
+    command: npm run start:docker

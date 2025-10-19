@@ -969,7 +969,7 @@ test("panels: strict mode offers only local candidates to the Director", async (
   const rec = await recommendPanel(project, construct, {
     outputSchemaFor: () => ({ type: "binary", options: ["yes", "no"] }),
   });
-  assert.ok(!/anthropic|claude|gpt-4o/i.test(candidatesShown), "no network models offered under strict mode");
+  assert.ok(!/anthropic|claude|gpt-5/i.test(candidatesShown), "no network models offered under strict mode");
   assert.deepEqual(rec.payload.jurors.map((j) => j.provider).sort(), ["mock", "ollama", "ollama"]);
   assert.equal(new Set(rec.families).size, 3, "local families still disjoint");
 });

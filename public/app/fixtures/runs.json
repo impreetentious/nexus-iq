@@ -14,7 +14,7 @@
         { "unitId": "u_d12f4a86c3e09b58", "code": "TRUNCATED", "message": "structured output truncated at the token limit; raise maxTokens (currently 400)" }
       ],
       "provider": "anthropic+openai+ollama",
-      "model": "claude-3-5-haiku+gpt-4o-mini+qwen2.5:7b-instruct",
+      "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
       "snapshot": null,
       "pinned": true,
       "capUSD": null,

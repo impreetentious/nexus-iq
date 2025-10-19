@@ -763,25 +763,25 @@ describe("OpenAIAdapter.catalog (live)", () => {
           "gpt-4-turbo",                  // exact static match
           "gpt-4-turbo-preview-2026-05-01",  // dated → prefix-match gpt-4-turbo-preview
           "gpt-6-preview",            // chat, but no static entry → honest unknown
-          "o3-mini",                  // o-series reasoning → chat-capable
+          "o4-mini",                  // o-series reasoning → chat-capable
           "chatgpt-4o-latest",        // chatgpt prefix → chat
           // everything below must be filtered out:
           "text-embedding-3-large",
-          "gpt-4o-realtime-preview",
+          "gpt-4o-mini-tts",
           "whisper-1",
           "dall-e-3",
           "omni-moderation-latest",
           "gpt-4o-realtime-preview",
           "gpt-4o-audio-preview",
-          "gpt-4o-audio-preview",
-          "dall-e-2",
+          "gpt-4o-transcribe",
+          "gpt-image-1",
         ]);
       },
       async (srv) => {
         const adapter = new OpenAIAdapter({ apiKey: "sk-oai-live", baseUrl: srv.url });
         const cat = await adapter.catalog();
         const ids = cat.map((m) => m.id);
-        assert.deepEqual(ids, ["gpt-4-turbo", "gpt-4-turbo-preview-2026-05-01", "gpt-6-preview", "o3-mini", "chatgpt-4o-latest"],
+        assert.deepEqual(ids, ["gpt-4-turbo", "gpt-4-turbo-preview-2026-05-01", "gpt-6-preview", "o4-mini", "chatgpt-4o-latest"],
           "only chat-capable families survive, in list order");
 
         const byId = Object.fromEntries(cat.map((m) => [m.id, m]));
@@ -795,7 +795,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
         assert.deepEqual(byId["gpt-6-preview"].pricing, { inUSDper1M: 0, outUSDper1M: 0 });
         assert.equal(byId["gpt-6-preview"].ctx, null);
         assert.equal(byId["gpt-6-preview"].estimate, true);
-        assert.equal(byId["o3-mini"].estimate, true, "o-series with no static row is an honest unknown");
+        assert.equal(byId["o4-mini"].estimate, true, "o-series with no static row is an honest unknown");
         // capability fields present for catalog-route consistency
         assert.equal(byId["gpt-4-turbo"].structuredOutput, true);
       },

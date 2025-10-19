@@ -16,7 +16,7 @@
         "runId": "run_panel_full",
         "instrumentId": "inst_panel",
         "status": "complete",
-        "model": "claude-3-5-haiku+gpt-4o-mini+qwen2.5:7b-instruct",
+        "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
         "outputs": [
           { "juror": "claude-haiku·9f2e", "label": "management", "confidence": 0.84, "rationale": "The pivotal clause is “watching every good manager leave while the broken processes stayed” — an evaluation of leadership stewardship. Pay is explicitly discounted (“the pay was fine”)." },
           { "juror": "gpt-mini·2c81", "label": "workload-burnout", "confidence": 0.61, "rationale": "“Doing two jobs and interviewing for a third” describes unsustainable load at exit. The manager mention reads as context for the workload, not the complaint itself." },
@@ -39,7 +39,7 @@
         "runId": "run_panel_full",
         "instrumentId": "inst_panel",
         "status": "complete",
-        "model": "claude-3-5-haiku+gpt-4o-mini+qwen2.5:7b-instruct",
+        "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
         "outputs": [
           { "juror": "claude-haiku·9f2e", "label": "pay", "confidence": 0.91, "rationale": "“El salario nunca alcanzó” states compensation inadequacy directly; the affection for the team is valence, not theme." },
           { "juror": "gpt-mini·2c81", "label": "pay", "confidence": 0.85, "rationale": "Salary insufficiency is named first and framed as decisive; management unresponsiveness is secondary." },
@@ -62,7 +62,7 @@
         "runId": "run_panel_full",
         "instrumentId": "inst_panel",
         "status": "complete",
-        "model": "claude-3-5-haiku+gpt-4o-mini+qwen2.5:7b-instruct",
+        "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
         "outputs": [
           { "juror": "claude-haiku·9f2e", "label": "growth", "confidence": 0.88, "rationale": "Stalled advancement (“promised a promotion … both times”) is the operative grievance; the named director is the vehicle, not the theme." },
           { "juror": "aggregate", "label": "growth", "confidence": 0.88 }
@@ -83,7 +83,7 @@
         "runId": "run_panel_full",
         "instrumentId": "inst_panel",
         "status": "complete",
-        "model": "claude-3-5-haiku+gpt-4o-mini+qwen2.5:7b-instruct",
+        "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
         "outputs": [
           { "juror": "claude-haiku·9f2e", "label": "workload-burnout", "confidence": 0.66, "rationale": "Sarcasm inverts the surface reading: “totally reasonable” + “eighty-hour weeks” signals burnout, not satisfaction." },
           { "juror": "gpt-mini·2c81", "label": "other", "confidence": 0.41, "rationale": "Surface reading is positive about workload; low confidence because the tone may be ironic." },
@@ -105,7 +105,7 @@
         "runId": "run_panel_full",
         "instrumentId": "inst_panel",
         "status": "complete",
-        "model": "claude-3-5-haiku+gpt-4o-mini+qwen2.5:7b-instruct",
+        "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
         "outputs": [
           { "juror": "claude-haiku·9f2e", "label": "pay", "confidence": 0.95, "rationale": "Quantified under-market salary plus failed comp cycles — pay is decisive and explicit." },
           { "juror": "aggregate", "label": "pay", "confidence": 0.95 }
@@ -126,7 +126,7 @@
         "runId": "run_panel_full",
         "instrumentId": "inst_panel",
         "status": "complete",
-        "model": "claude-3-5-haiku+gpt-4o-mini+qwen2.5:7b-instruct",
+        "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
         "outputs": [
           { "juror": "claude-haiku·9f2e", "label": "workload-burnout", "confidence": 0.71, "rationale": "“Queue doubled, headcount didn't” is a load complaint; “doing more with less” is the mechanism." },
           { "juror": "gpt-mini·2c81", "label": "management", "confidence": 0.66, "rationale": "The blame lands on management's framing and decisions, quoted with contempt." },
@@ -149,7 +149,7 @@
         "runId": "run_panel_full",
         "instrumentId": "inst_panel",
         "status": "complete",
-        "model": "claude-3-5-haiku+gpt-4o-mini+qwen2.5:7b-instruct",
+        "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
         "outputs": [
           { "juror": "claude-haiku·9f2e", "label": "other", "confidence": 0.55, "rationale": "Quit-regret with a process complaint; no decisive grievance against the org's conditions." },
           { "juror": "gpt-mini·2c81", "label": "pay", "confidence": 0.52, "rationale": "Counteroffer timing is a compensation-process failure." },
@@ -172,7 +172,7 @@
         "runId": "run_panel_full",
         "instrumentId": "inst_panel",
         "status": "complete",
-        "model": "claude-3-5-haiku+gpt-4o-mini+qwen2.5:7b-instruct",
+        "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
         "outputs": [
           { "juror": "claude-haiku·9f2e", "label": "remote-policy", "confidence": 0.58, "rationale": "Direct RTO-policy grievance, in Spanish; confidence reduced by language mix.", "escalated": true },
           { "juror": "aggregate", "label": "remote-policy", "confidence": 0.58, "escalated": true }
@@ -191,7 +191,7 @@
         "runId": "run_panel_full",
         "instrumentId": "inst_panel",
         "status": "complete",
-        "model": "claude-3-5-haiku+gpt-4o-mini+qwen2.5:7b-instruct",
+        "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
         "outputs": [
           { "juror": "claude-haiku·9f2e", "label": "workload-burnout", "confidence": 0.82, "rationale": "“The pace was not survivable… the second one wins” settles it." },
           { "juror": "gpt-mini·2c81", "label": "workload-burnout", "confidence": 0.77, "rationale": "Pace framed as decisive over work quality." },
@@ -214,7 +214,7 @@
         "runId": "run_panel_full",
         "instrumentId": "inst_panel",
         "status": "complete",
-        "model": "claude-3-5-haiku+gpt-4o-mini+qwen2.5:7b-instruct",
+        "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
         "outputs": [
           { "juror": "claude-haiku·9f2e", "label": "growth", "confidence": 0.78, "rationale": "A development plan asked for three times and never delivered is blocked growth." },
           { "juror": "gpt-mini·2c81", "label": "growth", "confidence": 0.7, "rationale": "Career-development neglect is the complaint." },

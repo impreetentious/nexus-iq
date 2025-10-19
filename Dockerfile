@@ -8,13 +8,15 @@ RUN npm run build
 
 FROM node:20-alpine
 WORKDIR /app
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/next.config.js ./next.config.js
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/pages ./pages
-COPY --from=builder /app/server ./server
+RUN chown node:node /app
+COPY --from=builder --chown=node:node /app/package*.json ./
+COPY --from=builder --chown=node:node /app/next.config.js ./next.config.js
+COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/.next ./.next
+COPY --from=builder --chown=node:node /app/pages ./pages
+COPY --from=builder --chown=node:node /app/server ./server
+USER node
 RUN npm ci
 EXPOSE 3000
 EXPOSE 7341
-CMD ["npm","run","start"]
+CMD ["npm","run","start:docker"]

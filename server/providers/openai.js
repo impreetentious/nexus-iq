@@ -11,10 +11,10 @@ const STATIC_CATALOG = [
 const CATALOG_TTL_MS = 60 * 60 * 1000; // 1h, matches routes/catalog.js
 
 // /v1/models lists EVERY model the key can reach. Keep only chat-completions
-// families (gpt*, o-series o1…, chatgpt*) and drop the modalities Nexus IQ
+// families (gpt*, o-series o1/o3/o4…, chatgpt*) and drop the modalities Nexus IQ
 // cannot drive as a judge — embeddings, TTS, whisper, dall-e, moderation,
 // audio/realtime, transcription, image — including the gpt-4o-* variants that
-// share the chat prefix but are not chat endpoints (gpt-4o-realtime-preview, …).
+// share the chat prefix but are not chat endpoints (gpt-4o-mini-tts, …).
 const CHAT_PREFIX = /^(?:gpt|chatgpt|o\d)/i;
 const NON_CHAT = /(?:embed|tts|whisper|dall-?e|moderation|realtime|audio|transcrib|image|search|computer-use)/i;
 const isChatModel = (id) => typeof id === "string" && CHAT_PREFIX.test(id) && !NON_CHAT.test(id);

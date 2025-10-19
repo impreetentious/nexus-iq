@@ -1,6 +1,6 @@
 {
   "name": "nexus-iq",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Nexus IQ – qualitative text measurement platform built with Next.js.",
   "type": "module",
   "private": false,
@@ -9,25 +9,31 @@
   },
   "scripts": {
     "dev": "concurrently \"npm run next:dev\" \"npm run server\"",
-    "next:dev": "next dev",
+    "next:dev": "next dev -H 127.0.0.1",
     "next:build": "next build",
-    "next:start": "next start",
+    "next:start": "next start -H 127.0.0.1",
     "server": "node server/index.js",
     "build": "npm run next:build",
     "start": "concurrently \"npm run next:start\" \"npm run server\"",
-    "test": "node --test tests/unit/*.test.js tests/integration/*.test.js tests/server/*.test.js tests/e2e/*.test.js tests/sim/*.test.js"
+    "start:docker": "concurrently \"next start -H 0.0.0.0\" \"npm run server\"",
+    "test": "node --test \"tests/unit/**/*.test.js\" \"tests/integration/**/*.test.js\" \"tests/server/**/*.test.js\" \"tests/e2e/**/*.test.js\" \"tests/sim/**/*.test.js\""
   },
   "dependencies": {
     "busboy": "^1.6.0",
     "concurrently": "^8.0.1",
     "fflate": "^0.8.2",
-    "lint": "^1.1.2",
     "mammoth": "^1.8.0",
-    "next": "14.2.23",
+    "next": "^15.5.2",
     "pdfjs-dist": "^4.10.38",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "typescript": "^5.7.3",
-    "xlsx": "^0.18.5"
+    "typescript": "^5.9.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "lint": "^1.1.2"
+  },
+  "overrides": {
+    "postcss": "^8.5.6"
   }
 }

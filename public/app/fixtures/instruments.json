@@ -148,7 +148,7 @@
       "payload": {
         "jurors": [
           { "provider": "anthropic", "model": "claude-3-5-haiku", "snapshot": "claude-3-5-haiku-20241022", "family": "claude", "params": { "temperature": 0, "maxTokens": 400 }, "workerClass": "small" },
-          { "provider": "openai", "model": "gpt-4o-mini", "snapshot": "gpt-4o-mini-2024-07-18", "family": "gpt", "params": { "temperature": 0, "maxTokens": 400 }, "workerClass": "small" },
+          { "provider": "openai", "model": "gpt-5-mini", "snapshot": "gpt-5-mini-2025-08-07", "family": "gpt", "params": { "temperature": 0, "maxTokens": 400 }, "workerClass": "small" },
           { "provider": "ollama", "model": "qwen2.5:7b-instruct", "snapshot": "qwen2.5:7b-instruct-q4_K_M", "family": "qwen", "params": { "temperature": 0, "maxTokens": 400 }, "workerClass": "small" }
         ],
         "aggregation": "majority"

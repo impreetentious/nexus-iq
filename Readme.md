@@ -6,28 +6,9 @@ The product is built around two modes of work:
 
 - Fast exploration: import text, inspect the corpus, generate briefs, draft constructs, and try instruments quickly.
 - Honest publication: calibrate against human-coded gold data, inspect the evidence behind each result, and export reproducible artifacts with clear provenance.
-
-## Quick Start
-
-Prerequisite: Node.js `20.10+`.
-
-```bash
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
 - The Next.js shell runs on port `3000`.
 - The Nexus IQ backend runs on port `7341` by default.
 - The shell proxies `/api/*` requests to the backend automatically.
-
-For a production-style local run:
-
-```bash
-npm run build
-npm run start
-```
 
 ## Demo Flow
 
@@ -52,6 +33,12 @@ Nexus IQ supports:
 - MockModel
 
 Keys are stored in `config/keys.json`, which is gitignored and excluded from exports.
+
+## Privacy & PII Handling
+
+Before analysis, Nexus IQ can scan a corpus for emails, phone numbers, SSNs, URL-embedded credentials, and likely names, then reversibly pseudonymize them (`[EMAIL_1]`, `[NAME_2]`, …) with the re-identification map stored outside the project bundle. This covers both unit text and string metadata columns.
+
+Name detection is a capitalized-bigram heuristic with a stoplist, not a trained NER model. It will miss single first names and non-"Firstname Lastname" name orders, and can occasionally mis-flag or miss unlisted proper nouns. Treat it as a strong first pass, not a guarantee — review a sample of masked output before sharing or exporting a corpus that contains real personal data.
 
 ## Repository Map
 
