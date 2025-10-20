@@ -1,6 +1,6 @@
 {
   "name": "nexus-iq",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Nexus IQ – qualitative text measurement platform built with Next.js.",
   "type": "module",
   "private": false,
@@ -16,18 +16,17 @@
     "build": "npm run next:build",
     "start": "concurrently \"npm run next:start\" \"npm run server\"",
     "start:docker": "concurrently \"next start -H 0.0.0.0\" \"npm run server\"",
-    "test": "node --test \"tests/unit/**/*.test.js\" \"tests/integration/**/*.test.js\" \"tests/server/**/*.test.js\" \"tests/e2e/**/*.test.js\" \"tests/sim/**/*.test.js\""
+    "test": "node --test"
   },
   "dependencies": {
     "busboy": "^1.6.0",
     "concurrently": "^8.0.1",
     "fflate": "^0.8.2",
     "mammoth": "^1.8.0",
-    "next": "^15.5.2",
+    "next": "^15.5.3",
     "pdfjs-dist": "^4.10.38",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "typescript": "^5.9.2",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

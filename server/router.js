@@ -211,8 +211,12 @@ export function createRouter({ appDir, maxJsonBody = DEFAULT_MAX_JSON_BODY, fsIm
       if (err.details && Object.keys(err.details).length > 0) error.details = err.details;
       sendJson(res, status, { ok: false, error });
     } else {
+      // Full error (incl. stack) goes to the server log only. The client only
+      // ever sees a fixed, generic message — err.message can carry internal
+      // paths, object shapes, or other implementation detail that shouldn't
+      // cross the wire for an error class we didn't anticipate.
       console.error(err);
-      sendJson(res, 500, { ok: false, error: { code: "INTERNAL", message: err.message || "Internal error" } });
+      sendJson(res, 500, { ok: false, error: { code: "INTERNAL", message: "Internal error" } });
     }
   }
 
