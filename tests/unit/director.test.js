@@ -904,7 +904,7 @@ test("panels: recommends a family-disjoint panel from registry catalogs", async 
     return {
       jurors: [
         { provider: "anthropic", model: "claude-3-5-haiku", workerClass: "mid" },
-        { provider: "openai", model: "gpt-4-turbo-preview", workerClass: "mid" },
+        { provider: "openai", model: "gpt-5-mini", workerClass: "mid" },
         { provider: "mock", model: "mock-1", workerClass: "small" },
       ],
       aggregation: "majority",
@@ -999,7 +999,7 @@ test("panels: juror budgets are compiler's CLASS_MAX_TOKENS (small ≥1024, mid 
   mock.setHandler("t-panel-budget", () => ({
     jurors: [
       { provider: "anthropic", model: "claude-3-5-sonnet", workerClass: "frontier" },
-      { provider: "openai", model: "gpt-4-turbo-preview", workerClass: "mid" },
+      { provider: "openai", model: "gpt-5-mini", workerClass: "mid" },
       { provider: "mock", model: "mock-1", workerClass: "small" },
     ],
     aggregation: "majority",

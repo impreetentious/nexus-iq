@@ -25,6 +25,22 @@ const LOCAL = new Set(["mock", "ollama"]);
 const NO_TRAINING_ALLOW = new Set(["anthropic", "openai"]);
 const MODES = new Set(["open", "no-training", "strict"]);
 
+// "strict" means ON-MACHINE, not "provider named ollama": keys.json may point
+// the ollama adapter at any baseUrl, so the endpoint itself must prove local.
+// Only literal loopback hosts qualify — a DNS name that happens to resolve to
+// 127.0.0.1 today can be re-pointed off-machine tomorrow, so names other than
+// "localhost" fail closed.
+export function isLoopbackBaseUrl(baseUrl) {
+  if (baseUrl === undefined || baseUrl === null || baseUrl === "") return true; // adapter default is localhost
+  let host;
+  try {
+    host = new URL(String(baseUrl)).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  } catch {
+    return false; // unparseable → fail closed
+  }
+  return host === "localhost" || host === "::1" || /^127(?:\.\d{1,3}){3}$/.test(host);
+}
+
 // Adapter instances are memoized per (providerName, keysPath, resolved
 // baseUrl): stateful adapters (mock's oracle/handlers) must survive across
 // getAdapter calls, and reconstructing per call wastes work. Only
@@ -89,6 +105,13 @@ export function getAdapter(project, providerName, { justification, keysPath } = 
 
   const path = keysPath ?? resolve(process.cwd(), "config", "keys.json");
   const entry = normalizeEntry(readKeys(path)[providerName]);
+  if (mode === "strict" && providerName === "ollama" && !isLoopbackBaseUrl(entry.baseUrl)) {
+    throw new NexusIQError(
+      "PRIVACY_BLOCKED",
+      `privacy mode "strict" permits only on-machine backends; the configured ollama baseUrl "${entry.baseUrl}" is not a loopback address`,
+      { mode, provider: providerName, baseUrl: entry.baseUrl },
+    );
+  }
   const cacheKey = `${providerName}\x00${path}\x00${entry.baseUrl ?? ""}`;
   let adapter = adapterCache.get(cacheKey);
   if (!adapter) {

@@ -3,9 +3,13 @@
 import { NexusIQError } from "../core/errors.js";
 import { Adapter, httpJSON, malformedResponse, mergeCatalogPricing } from "./base.js";
 
+// Figures verified against platform.openai.com/docs/models, 2025-09
+// (GPT-4 Turbo $10/$30 · 128K ctx; GPT-5 mini $0.25/$2 · 400K ctx). `gpt-5-mini`
+// is the current small-model id — there is no `gpt-4-turbo-preview`. Keyless
+// selection targets these ids directly, so a wrong id would 404 the call.
 const STATIC_CATALOG = [
   { id: "gpt-4-turbo", name: "GPT-4 Turbo", family: "openai", ctx: 128_000, pricing: { inUSDper1M: 10, outUSDper1M: 30 }, snapshot: "gpt-4-turbo", estimate: true },
-  { id: "gpt-4-turbo-preview", name: "GPT-4 Turbo Preview", family: "openai", ctx: 128_000, pricing: { inUSDper1M: 10, outUSDper1M: 30 }, snapshot: "gpt-4-turbo-preview", estimate: true },
+  { id: "gpt-5-mini", name: "GPT-5 mini", family: "openai", ctx: 400_000, pricing: { inUSDper1M: 0.25, outUSDper1M: 2 }, snapshot: "gpt-5-mini", estimate: true },
 ];
 
 const CATALOG_TTL_MS = 60 * 60 * 1000; // 1h, matches routes/catalog.js

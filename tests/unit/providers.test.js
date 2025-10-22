@@ -761,7 +761,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
         assert.equal(call.headers.authorization, "Bearer sk-oai-live");
         return modelsList([
           "gpt-4-turbo",                  // exact static match
-          "gpt-4-turbo-preview-2026-05-01",  // dated → prefix-match gpt-4-turbo-preview
+          "gpt-5-mini-2026-05-01",    // dated → prefix-match gpt-5-mini
           "gpt-6-preview",            // chat, but no static entry → honest unknown
           "o4-mini",                  // o-series reasoning → chat-capable
           "chatgpt-4o-latest",        // chatgpt prefix → chat
@@ -781,16 +781,16 @@ describe("OpenAIAdapter.catalog (live)", () => {
         const adapter = new OpenAIAdapter({ apiKey: "sk-oai-live", baseUrl: srv.url });
         const cat = await adapter.catalog();
         const ids = cat.map((m) => m.id);
-        assert.deepEqual(ids, ["gpt-4-turbo", "gpt-4-turbo-preview-2026-05-01", "gpt-6-preview", "o4-mini", "chatgpt-4o-latest"],
+        assert.deepEqual(ids, ["gpt-4-turbo", "gpt-5-mini-2026-05-01", "gpt-6-preview", "o4-mini", "chatgpt-4o-latest"],
           "only chat-capable families survive, in list order");
 
         const byId = Object.fromEntries(cat.map((m) => [m.id, m]));
         assert.deepEqual(byId["gpt-4-turbo"].pricing, { inUSDper1M: 10, outUSDper1M: 30 });
         assert.equal(byId["gpt-4-turbo"].ctx, 128_000);
         assert.equal(byId["gpt-4-turbo"].family, "openai");
-        // dated preview snapshot inherits preview pricing by prefix
-        assert.deepEqual(byId["gpt-4-turbo-preview-2026-05-01"].pricing, { inUSDper1M: 10, outUSDper1M: 30 });
-        assert.equal(byId["gpt-4-turbo-preview-2026-05-01"].snapshot, "gpt-4-turbo-preview-2026-05-01");
+        // dated mini snapshot inherits mini pricing by prefix
+        assert.deepEqual(byId["gpt-5-mini-2026-05-01"].pricing, { inUSDper1M: 0.25, outUSDper1M: 2 });
+        assert.equal(byId["gpt-5-mini-2026-05-01"].snapshot, "gpt-5-mini-2026-05-01");
         // unknown chat model → honest unknown
         assert.deepEqual(byId["gpt-6-preview"].pricing, { inUSDper1M: 0, outUSDper1M: 0 });
         assert.equal(byId["gpt-6-preview"].ctx, null);
@@ -802,14 +802,14 @@ describe("OpenAIAdapter.catalog (live)", () => {
     );
   });
 
-  it("a gpt-4-turbo-preview listing resolves by prefix to a priced row", async () => {
+  it("longest-prefix wins: gpt-5-mini beats gpt-5 for a mini snapshot", async () => {
     await withServer(
-      () => modelsList(["gpt-4-turbo-preview"]),
+      () => modelsList(["gpt-5-mini"]),
       async (srv) => {
         const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
         const cat = await adapter.catalog();
-        // priced from the static table, never the {0,0} honest unknown
-        assert.deepEqual(cat[0].pricing, { inUSDper1M: 10, outUSDper1M: 30 });
+        // must pick the mini row (0.25/2), not the gpt-4-turbo row (10/30)
+        assert.deepEqual(cat[0].pricing, { inUSDper1M: 0.25, outUSDper1M: 2 });
       },
     );
   });
@@ -820,7 +820,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
       async (srv) => {
         const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
         const cat = await adapter.catalog();
-        assert.deepEqual(cat.map((m) => m.id), ["gpt-4-turbo", "gpt-4-turbo-preview"]);
+        assert.deepEqual(cat.map((m) => m.id), ["gpt-4-turbo", "gpt-5-mini"]);
         for (const m of cat) assert.equal(m.estimate, true);
       },
     );
@@ -833,7 +833,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
     try {
       const cat = await new OpenAIAdapter({}).catalog();
       assert.equal(fetches, 0, "keyless catalog must not hit the network");
-      assert.deepEqual(cat.map((m) => m.id), ["gpt-4-turbo", "gpt-4-turbo-preview"]);
+      assert.deepEqual(cat.map((m) => m.id), ["gpt-4-turbo", "gpt-5-mini"]);
     } finally {
       globalThis.fetch = realFetch;
     }
@@ -1722,6 +1722,35 @@ describe("registry privacy gates", () => {
       assert.equal(fetches, 0);
     } finally {
       globalThis.fetch = realFetch;
+    }
+  });
+
+  it("strict rejects a remote ollama baseUrl; loopback baseUrls pass", () => {
+    const dir = mkdtempSync(join(tmpdir(), "nexus-iq-strict-ollama-"));
+    const keysAt = (baseUrl) => {
+      const p = join(dir, `keys-${Buffer.from(baseUrl).toString("hex").slice(0, 12)}.json`);
+      writeFileSync(p, JSON.stringify({ ollama: { baseUrl } }), "utf8");
+      return p;
+    };
+    try {
+      const strict = { privacyMode: "strict" };
+      // provider NAME is not proof of locality — the endpoint must be loopback
+      for (const remote of ["http://192.168.1.20:11434", "https://ollama.example.com", "http://my-box.local:11434", "not a url"]) {
+        assert.throws(
+          () => getAdapter(strict, "ollama", { keysPath: keysAt(remote) }),
+          (err) => err.code === "PRIVACY_BLOCKED" && /loopback/i.test(err.message),
+          `strict must refuse ollama at ${remote}`,
+        );
+      }
+      for (const local of ["http://localhost:11434", "http://127.0.0.1:11434", "http://127.1.2.3:11434", "http://[::1]:11434"]) {
+        const { adapter } = getAdapter(strict, "ollama", { keysPath: keysAt(local) });
+        assert.ok(adapter instanceof OllamaAdapter, `strict must allow ollama at ${local}`);
+      }
+      // the SAME remote endpoint stays reachable under "open" — strict-only gate
+      const open = getAdapter({ privacyMode: "open" }, "ollama", { keysPath: keysAt("http://192.168.1.20:11434") });
+      assert.ok(open.adapter instanceof OllamaAdapter);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
