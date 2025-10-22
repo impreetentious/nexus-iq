@@ -6,7 +6,7 @@
 import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { NexusIQError } from "../core/errors.js";
-import { updateProject, loadProject } from "../core/store.js";
+import { updateProject, loadProject, DIR_MODE, FILE_MODE } from "../core/store.js";
 import * as ledger from "../core/ledger.js";
 import { clearAdapterCache } from "../providers/registry.js";
 import { PRIVACY_MODES } from "../core/objects.js";
@@ -124,8 +124,10 @@ export default [
           if (entry === null || entry === "") delete existing[provider];
           else existing[provider] = entry;
         }
-        await mkdir(configDir(), { recursive: true });
-        await writeFile(keysFile(), JSON.stringify(existing, null, 2), "utf8");
+        await mkdir(configDir(), { recursive: true, mode: DIR_MODE });
+        // provider API keys are the crown jewels — 0600 so other OS users on a
+        // shared machine cannot read them
+        await writeFile(keysFile(), JSON.stringify(existing, null, 2), { encoding: "utf8", mode: FILE_MODE });
         // rotated keys are invisible to the adapter cache key — drop it
         clearAdapterCache();
         result.keysUpdated = Object.keys(body.keys);

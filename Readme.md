@@ -2,7 +2,7 @@
 
 Nexus IQ is a local-first qualitative text measurement platform. It combines a Next.js shell with a Node backend so teams can move from exploratory reading to calibrated, evidence-linked analysis without depending on a hosted service by default.
 
-**Release version:** `v2.3.1`
+**Release version:** `v2.3.2`
 
 The product is built around two modes of work:
 
@@ -81,6 +81,10 @@ node --test tests/sim/dsl.sim.test.js
 ```
 
 ## Changelog
+
+### v2.3.2
+
+- Filesystem hardening: validate project slugs at the store boundary with resolved-path containment, write bundles/keys/PII vaults with private `0700`/`0600` modes (plus a boot-time chmod migration), and sweep abandoned pending imports at startup.
 
 ### v2.3.1
 

@@ -24,7 +24,7 @@ import { mkdir, writeFile, rm, readdir, stat } from "node:fs/promises";
 import { NexusIQError } from "../core/errors.js";
 import { parseMultipart } from "../router.js";
 import { newId } from "../core/ids.js";
-import { loadProject, updateProject } from "../core/store.js";
+import { loadProject, updateProject, listProjects, DIR_MODE, FILE_MODE } from "../core/store.js";
 import * as ledger from "../core/ledger.js";
 import { detect, bestTextColumn } from "../ingest/mapping.js";
 import { unitize } from "../ingest/unitize.js";
@@ -99,6 +99,38 @@ export function metaColumnsOf(units) {
 // keeps the original text; "pseudonymize" is the only mode that rewrites it.
 const PII_MODES = new Set(["off", "scan", "pseudonymize"]);
 
+// Abandoned-import GC. A staged upload (raw bytes + parsed .json record) is
+// removed on successful confirm, but a crash or a user who walks away between
+// upload and confirm leaves it — parsed corpus rows, possibly with PII, sitting
+// in the bundle indefinitely. Swept at startup across every project: anything
+// older than PENDING_IMPORT_TTL_MS is deleted. Best-effort; never blocks boot.
+const PENDING_IMPORT_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+export async function cleanupStalePendingImports({ ttlMs = PENDING_IMPORT_TTL_MS, now = Date.now() } = {}) {
+  let removed = 0;
+  for (const entry of await listProjects().catch(() => [])) {
+    if (!entry || entry.corrupt || !entry.slug) continue;
+    const dir = importsDir(entry.slug);
+    let names;
+    try {
+      names = await readdir(dir);
+    } catch {
+      continue; // no .imports dir for this project
+    }
+    for (const name of names) {
+      const file = path.join(dir, name);
+      try {
+        const s = await stat(file);
+        if (now - s.mtimeMs > ttlMs) {
+          await rm(file, { force: true }).catch(() => {});
+          removed += 1;
+        }
+      } catch { /* raced with another remover — fine */ }
+    }
+  }
+  return { removed };
+}
+
 async function latestImportId(slug) {
   let entries;
   try {
@@ -134,9 +166,11 @@ export default [
       // parsers take file paths: stage the upload inside the bundle's .imports
       const importId = newId("imp");
       const dir = importsDir(project.slug);
-      await mkdir(dir, { recursive: true });
+      await mkdir(dir, { recursive: true, mode: DIR_MODE });
       const srcPath = path.join(dir, `${importId}${ext}`);
-      await writeFile(srcPath, file.buffer);
+      // raw corpus bytes — private mode for the brief window before the
+      // finally below removes them
+      await writeFile(srcPath, file.buffer, { mode: FILE_MODE });
       let parsed;
       try {
         const mod = await import(spec.mod);

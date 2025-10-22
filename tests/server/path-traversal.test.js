@@ -7,7 +7,7 @@
 // route will read it.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { startServer } from "../../server/index.js";
@@ -92,6 +92,34 @@ test("traversal project slug is rejected", async () => {
   const { status, text } = await bodyOf(await fetch(`${base}/api/projects/${encodeURIComponent("../../config")}`));
   assert.ok(status === 400 || status === 404, `slug escape → ${status}`);
   assert.ok(!text.includes(SECRET), "slug escape LEAKED the secret");
+});
+
+// The appended "project.json" hid one case from the tests above: a PLANTED
+// sibling bundle outside projects/ was readable via GET /api/projects/..%2F<x>
+// (the router decodes %2F inside a segment) and writable via any mutating
+// route once the planted file's own slug matched. The store now validates
+// slugs at the path-building boundary, so both directions must refuse.
+test("planted sibling project.json is neither readable nor writable via ..%2F slugs", async () => {
+  const MARK = "PLANTED-SIBLING-PROJECT-DO-NOT-SERVE";
+  const real = JSON.parse(await readFile(path.join(tmpProjects, slug, "project.json"), "utf8"));
+  const outsideDir = path.join(tmpRoot, "outside");
+  await mkdir(outsideDir, { recursive: true });
+  const planted = { ...real, slug: "../outside", name: MARK };
+  const plantedFile = path.join(outsideDir, "project.json");
+  await writeFile(plantedFile, JSON.stringify(planted, null, 2), "utf8");
+  const before = await readFile(plantedFile, "utf8");
+
+  const enc = encodeURIComponent("../outside"); // → ..%2Foutside
+  const read = await bodyOf(await fetch(`${base}/api/projects/${enc}`));
+  assert.ok(read.status === 400 || read.status === 404, `sibling read → ${read.status}, want 400/404`);
+  assert.ok(!read.text.includes(MARK), "sibling project.json LEAKED through the API");
+
+  const write = await bodyOf(await fetch(`${base}/api/projects/${enc}/constructs`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Escape", type: "binary" }),
+  }));
+  assert.ok(write.status === 400 || write.status === 404, `sibling write → ${write.status}, want 400/404`);
+  assert.equal(await readFile(plantedFile, "utf8"), before, "a traversal slug MUTATED a file outside projects/");
 });
 
 test("a normal id still 404s cleanly (guard does not break valid ids)", async () => {

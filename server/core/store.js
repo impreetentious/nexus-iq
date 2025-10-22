@@ -9,11 +9,37 @@ import { rehydrateProject } from "./objects.js";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
+// Private-by-default modes for everything a bundle persists (project graphs,
+// corpora, vaults, keys). Applied at creation; ensurePrivateDir/File migrate
+// pre-existing bundles best-effort. No-ops where the platform ignores modes.
+export const DIR_MODE = 0o700;
+export const FILE_MODE = 0o600;
+
 export function projectsDir() {
   return process.env.NEXUS_IQ_PROJECTS_DIR || path.join(repoRoot, "projects");
 }
 
+// The store-boundary slug guard. Route params reach loadProject/updateProject
+// directly (the router decodes %2F INSIDE segments, so "..%2Foutside" arrives
+// as "../outside"), and creation-time validation in objects.js cannot protect
+// the read path. Same character class as routes/_shared.js safeId, plus a
+// resolved-path containment check so the joined path can never leave `dir`.
+const SAFE_SLUG = /^[A-Za-z0-9_-]+$/;
+
+export function assertProjectSlug(slug, dir, { code = "VALIDATION" } = {}) {
+  const bad = () => new NexusIQError(
+    code,
+    code === "NOT_FOUND" ? `Project '${slug}' not found` : `invalid project slug '${slug}' (must be letters, digits, "-" or "_")`,
+    { slug },
+  );
+  if (typeof slug !== "string" || !SAFE_SLUG.test(slug)) throw bad();
+  const base = path.resolve(dir ?? projectsDir());
+  if (path.dirname(path.resolve(base, slug)) !== base) throw bad();
+  return slug;
+}
+
 export function projectDir(slug, dir = projectsDir()) {
+  assertProjectSlug(slug, dir);
   return path.join(dir, slug);
 }
 
@@ -57,7 +83,7 @@ export function renameWithRetry(from, to, opts = {}) {
 // rename — the §4 atomic-write recipe. tmp is removed if the rename fails.
 async function writeAtomic(file, data) {
   const tmp = `${file}.${process.pid}.${tmpSeq++}.tmp`;
-  const fh = await open(tmp, "w");
+  const fh = await open(tmp, "w", FILE_MODE);
   try {
     await fh.writeFile(data, "utf8");
     await fh.sync();
@@ -73,6 +99,9 @@ async function writeAtomic(file, data) {
 }
 
 export async function loadProject(slug, dir = projectsDir()) {
+  // NOT_FOUND (not VALIDATION) so hostile/garbled slugs read exactly like
+  // absent projects, and listProjects keeps skipping non-bundle directories.
+  assertProjectSlug(slug, dir, { code: "NOT_FOUND" });
   const file = path.join(dir, slug, "project.json");
   try {
     return rehydrateProject(JSON.parse(await readFile(file, "utf8")));
@@ -84,8 +113,9 @@ export async function loadProject(slug, dir = projectsDir()) {
 }
 
 async function writeProject(project, dir) {
+  assertProjectSlug(project.slug, dir);
   const pdir = path.join(dir, project.slug);
-  await mkdir(pdir, { recursive: true });
+  await mkdir(pdir, { recursive: true, mode: DIR_MODE });
   await writeAtomic(path.join(pdir, "project.json"), JSON.stringify(project, null, 2));
   return project;
 }
@@ -221,7 +251,7 @@ function withAppendLock(key, fn) {
 // escape and crash a run to "failed". Healing is re-derived from the file on
 // each attempt, so a retry stays correct.
 export async function appendNdjson(file, obj) {
-  await mkdir(path.dirname(file), { recursive: true });
+  await mkdir(path.dirname(file), { recursive: true, mode: DIR_MODE });
   const line = JSON.stringify(obj) + "\n";
   const bytes = Buffer.byteLength(line);
   return withAppendLock(path.resolve(file), () => retryTransient(async () => {
@@ -249,7 +279,7 @@ export async function appendNdjson(file, obj) {
       }
     }
     await appendFaultInjector?.();
-    await appendFile(file, line, "utf8");
+    await appendFile(file, line, { encoding: "utf8", mode: FILE_MODE });
     return { size: size + bytes };
   }));
 }

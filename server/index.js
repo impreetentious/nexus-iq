@@ -3,7 +3,7 @@
 // startServer() so tests
 // can spin up an ephemeral instance (port 0).
 import http from "node:http";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, chmod } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import os from "node:os";
 import path from "node:path";
@@ -95,6 +95,25 @@ async function mountRoutes(router, dir) {
     }
     for (const { method, pattern, handler } of mod.default) router.addRoute(method, pattern, handler);
   }
+}
+
+// Boot-time private-mode migration. New writes create 0700 dirs / 0600 files
+// (server/core/store.js), but bundles created before that shipped keep their
+// old 0755/0644 modes. Locking each project directory and the config directory
+// to 0700 makes them non-traversable by other OS users, which protects every
+// file inside regardless of its own mode. Best-effort: modes are a no-op on
+// platforms that ignore them, and one un-chmod-able entry must not block boot.
+async function migratePrivateModes() {
+  const { projectsDir } = await import("./core/store.js");
+  const { configDir, keysFile } = await import("./routes/_shared.js");
+  const harden = async (p, mode) => { try { await chmod(p, mode); } catch { /* gone/foreign/unsupported */ } };
+  try {
+    for (const e of await readdir(projectsDir(), { withFileTypes: true })) {
+      if (e.isDirectory()) await harden(path.join(projectsDir(), e.name), 0o700);
+    }
+  } catch { /* no projects dir yet */ }
+  await harden(configDir(), 0o700);
+  await harden(keysFile(), 0o600);
 }
 
 // Boot-time orphan sweep (see call site below). Lives here because index.js
@@ -192,6 +211,13 @@ export async function startServer({
   // resume is exactly-once off the outputs on disk — so the UI never watches
   // a runner that is not there. Best-effort; never blocks startup.
   healOrphanedRuns().catch(() => {});
+
+  // Boot-time housekeeping (best-effort, never blocks startup): tighten legacy
+  // bundle/config permissions, and GC pending imports abandoned before confirm.
+  migratePrivateModes().catch(() => {});
+  import("./routes/import.js")
+    .then((m) => m.cleanupStalePendingImports?.())
+    .catch(() => {});
 
   return {
     server,

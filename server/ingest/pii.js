@@ -13,7 +13,7 @@
 // (numbers, nulls) pass through untouched: the regexes cannot match a bare
 // number, and masking must never change a value's type.
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
-import { renameWithRetry } from "../core/store.js";
+import { renameWithRetry, DIR_MODE, FILE_MODE } from "../core/store.js";
 import { dirname } from "node:path";
 import { NexusIQError } from "../core/errors.js";
 
@@ -162,9 +162,11 @@ export function scan(units) {
 const KIND_TOKEN = { email: "EMAIL", phone: "PHONE", ssn: "SSN", url_user: "URL", name: "NAME" };
 
 async function writeJsonAtomic(path, obj) {
-  await mkdir(dirname(path), { recursive: true });
+  await mkdir(dirname(path), { recursive: true, mode: DIR_MODE });
   const tmp = path + ".tmp";
-  await writeFile(tmp, JSON.stringify(obj, null, 2), "utf8");
+  // the reversible re-identification vault is the most sensitive file a bundle
+  // holds — 0600 so it is not world/group readable
+  await writeFile(tmp, JSON.stringify(obj, null, 2), { encoding: "utf8", mode: FILE_MODE });
   await renameWithRetry(tmp, path);
 }
 

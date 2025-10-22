@@ -14,7 +14,7 @@
 import path from "node:path";
 import { mkdir, open, rename, rm, readFile } from "node:fs/promises";
 import { NexusIQError } from "../core/errors.js";
-import { renameWithRetry, loadProject, updateProject, readNdjson, projectDir, projectsDir } from "../core/store.js";
+import { renameWithRetry, loadProject, updateProject, readNdjson, projectDir, projectsDir, DIR_MODE, FILE_MODE } from "../core/store.js";
 import { directorCosts } from "../director/director.js";
 import {
   percentAgreement, cohenKappa, krippendorffAlpha, gwetAC1, perClass, confusion,
@@ -135,9 +135,9 @@ let tmpSeq = 0;
 // Atomic JSON write (tmp + fsync + rename) — same recipe as core/store, kept
 // local so routes do not reach into store internals.
 export async function writeJsonAtomic(file, obj) {
-  await mkdir(path.dirname(file), { recursive: true });
+  await mkdir(path.dirname(file), { recursive: true, mode: DIR_MODE });
   const tmp = `${file}.${process.pid}.${tmpSeq++}.tmp`;
-  const fh = await open(tmp, "w");
+  const fh = await open(tmp, "w", FILE_MODE);
   try {
     await fh.writeFile(JSON.stringify(obj, null, 2), "utf8");
     await fh.sync();
@@ -155,9 +155,9 @@ export async function writeJsonAtomic(file, obj) {
 
 // Atomic text write for whole-file artifacts (units.ndjson at import time).
 export async function writeTextAtomic(file, text) {
-  await mkdir(path.dirname(file), { recursive: true });
+  await mkdir(path.dirname(file), { recursive: true, mode: DIR_MODE });
   const tmp = `${file}.${process.pid}.${tmpSeq++}.tmp`;
-  const fh = await open(tmp, "w");
+  const fh = await open(tmp, "w", FILE_MODE);
   try {
     await fh.writeFile(text, "utf8");
     await fh.sync();
