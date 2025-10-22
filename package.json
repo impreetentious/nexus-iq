@@ -1,6 +1,6 @@
 {
   "name": "nexus-iq",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Nexus IQ – qualitative text measurement platform built with Next.js.",
   "type": "module",
   "license": "MIT",
@@ -29,9 +29,6 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
-  },
-  "devDependencies": {
-    "lint": "^1.1.2"
   },
   "overrides": {
     "postcss": "^8.5.6"
