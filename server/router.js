@@ -63,6 +63,20 @@ export function sse(res) {
   return conn;
 }
 
+// A browser Origin is local when its host is loopback — any port, any scheme.
+// Exported for the coder-listener (index.js), whose SHARED mode deliberately
+// widens this surface for one restricted route set.
+export function isLocalOrigin(origin) {
+  let url;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
 const MULTIPART_DEFAULTS = { maxFileSize: 200 * 1024 * 1024, maxFiles: 10, maxFields: 200 };
 
 export function parseMultipart(req, { maxFileSize = MULTIPART_DEFAULTS.maxFileSize, maxFiles = MULTIPART_DEFAULTS.maxFiles, maxFields = MULTIPART_DEFAULTS.maxFields } = {}) {
@@ -269,6 +283,19 @@ export function createRouter({ appDir, maxJsonBody = DEFAULT_MAX_JSON_BODY, fsIm
     const host = (req.headers.host || "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();
     if (host && host !== "localhost" && host !== "127.0.0.1" && host !== "::1") {
       return sendJson(res, 403, { ok: false, error: { code: "BAD_HOST", message: "Nexus IQ only answers local requests" } });
+    }
+    // CSRF guard: the Host check cannot stop a hostile page that simply
+    // form-POSTs to http://localhost:PORT (multipart and bodyless mutations
+    // need no preflight). Browsers stamp such requests with their Origin, so
+    // any state-changing method carrying a non-local Origin is refused; a
+    // missing Origin means a non-browser client (curl, tests), which the
+    // loopback bind already scopes to this machine. "null" origins (file://,
+    // sandboxed iframes) fail the URL parse and are refused too.
+    if (req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS") {
+      const origin = req.headers.origin;
+      if (typeof origin === "string" && origin !== "" && !isLocalOrigin(origin)) {
+        return sendJson(res, 403, { ok: false, error: { code: "BAD_ORIGIN", message: "Nexus IQ rejects cross-origin state changes" } });
+      }
     }
     req.query = Object.fromEntries(url.searchParams);
     const found = match(req.method, url.pathname);

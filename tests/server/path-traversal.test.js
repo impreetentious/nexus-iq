@@ -126,3 +126,32 @@ test("a normal id still 404s cleanly (guard does not break valid ids)", async ()
   const { status } = await bodyOf(await fetch(`${base}/api/projects/${slug}/analyses/an_doesnotexist`));
   assert.equal(status, 404, "a well-formed unknown id is NOT_FOUND, not VALIDATION");
 });
+
+// CSRF: a hostile page can form-POST to http://localhost:PORT with no preflight
+// (JSON via text/plain, or multipart). The Host check alone does not stop it —
+// the browser stamps a cross-origin Origin, which the router now refuses on any
+// state-changing method. A missing Origin (curl, tests) still passes; the
+// loopback bind scopes those to this machine.
+test("mutating requests with a cross-origin Origin are refused (CSRF guard)", async () => {
+  const hostile = await bodyOf(await fetch(`${base}/api/projects`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: "https://evil.example.com" },
+    body: JSON.stringify({ name: "CSRF Probe", privacyMode: "open" }),
+  }));
+  assert.equal(hostile.status, 403, `cross-origin POST → ${hostile.status}, want 403`);
+  assert.match(hostile.text, /BAD_ORIGIN/, "expected a BAD_ORIGIN refusal");
+
+  // a local Origin is accepted (the app's own fetches carry one)
+  const local = await bodyOf(await fetch(`${base}/api/projects`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: `http://127.0.0.1:${srv.port}` },
+    body: JSON.stringify({ name: "Local Origin OK", privacyMode: "open" }),
+  }));
+  assert.equal(local.status, 200, `same-origin POST → ${local.status}, want 200`);
+
+  // a GET with a cross-origin Origin is NOT blocked (reads are not state changes)
+  const read = await bodyOf(await fetch(`${base}/api/projects`, {
+    headers: { origin: "https://evil.example.com" },
+  }));
+  assert.equal(read.status, 200, "cross-origin GET must still be served");
+});

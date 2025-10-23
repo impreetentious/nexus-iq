@@ -277,7 +277,13 @@ export async function startCoderListener(projectSlug, goldsetId, coderId, {
     // accepted that exposure for this restricted surface — static files plus
     // /api/coder/* for ONE bound coder. Present a local host to the guard on
     // the shared listener only; the default loopback listener keeps it armed.
-    if (shared) req.headers.host = "127.0.0.1";
+    // The Origin CSRF guard is relaxed the same way for the same reason: a
+    // LAN coder's browser posts labels with its LAN-host Origin, which is
+    // exactly the exposure the researcher opted into for this listener.
+    if (shared) {
+      req.headers.host = "127.0.0.1";
+      if (typeof req.headers.origin === "string") req.headers.origin = "http://127.0.0.1";
+    }
     router.handle(req, res).catch(() => {
       if (!res.writableEnded) {
         try { res.statusCode = 500; res.end(); } catch { /* socket gone */ }
