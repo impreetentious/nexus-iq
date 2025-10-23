@@ -16,7 +16,10 @@ COPY --from=builder --chown=node:node /app/.next ./.next
 COPY --from=builder --chown=node:node /app/pages ./pages
 COPY --from=builder --chown=node:node /app/server ./server
 USER node
-RUN npm ci
+# runtime needs production deps only (next/react/parsers); devDependencies are
+# build-time
+RUN npm ci --omit=dev
+# Only 3000 is reachable: the backend binds 127.0.0.1 INSIDE the container, so
+# publishing 7341 could never work — the Next shell on 3000 proxies /api to it.
 EXPOSE 3000
-EXPOSE 7341
 CMD ["npm","run","start:docker"]

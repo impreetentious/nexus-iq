@@ -1,5 +1,7 @@
 # Optional local runtime for the public Nexus IQ app.
-version: '3.8'
+# Named volumes persist project bundles and provider config across container
+# recreation — without them, `docker compose down` (or a rebuild) discards all
+# projects, saved keys, and settings.
 services:
   app:
     build: .
@@ -8,3 +10,16 @@ services:
     environment:
       NXQ_PORT: "7341"
     command: npm run start:docker
+    volumes:
+      - projects:/app/projects
+      - config:/app/config
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  projects:
+  config:
