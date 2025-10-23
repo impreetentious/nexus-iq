@@ -89,6 +89,14 @@ function setTheme(theme) {
 }
 
 function initTheme() {
+  // Seed the store from the PERSISTED choice so the Settings theme buttons'
+  // aria-pressed matches the theme actually applied at boot (index.html's
+  // pre-paint script). Without this the store keeps its "auto" default while
+  // localStorage says "dark", and Settings highlights the wrong button.
+  let stored = null;
+  try { stored = localStorage.getItem("nexus-iq-theme"); } catch { /* private mode */ }
+  store.set("ui.theme", stored === "dark" || stored === "light" ? stored : "auto");
+
   const btn = $("theme-toggle");
   btn?.addEventListener("click", () => {
     const next = appliedTheme() === "dark" ? "light" : "dark";

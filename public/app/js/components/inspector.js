@@ -25,6 +25,10 @@ let body = null;
 let titleEl = null;
 let lastTrigger = null;
 let fetcherFn = null;
+// Monotonic token: each open() claims the next value; an async dossier only
+// paints if its token is still current. Without it, opening unit B while unit
+// A's fetch is in flight lets A's late resolution overwrite B's panel.
+let openSeq = 0;
 
 /** Build the panel chrome inside the inspector zone. Idempotent. */
 export function init({ host: hostEl, appRoot: rootEl } = {}) {
@@ -60,6 +64,10 @@ export function init({ host: hostEl, appRoot: rootEl } = {}) {
       close();
     }
   });
+  // A closed inspector is visually hidden but its × and links stay in the tab
+  // order until made inert. Reflect the initial (closed) state; open/close flip
+  // it. `inert` degrades to a no-op on browsers that don't support it.
+  host.inert = !isOpen();
 }
 
 export function isOpen() {
@@ -71,21 +79,27 @@ export function open(dossier, { title } = {}) {
   if (!host) init({});
   if (!host) return;
   appRoot?.setAttribute("data-inspector", "open");
+  host.inert = false; // controls are reachable again
   bus.emit("inspector:open", {});
 
   if (dossier && typeof dossier.then === "function") {
+    const token = ++openSeq;
+    const current = () => token === openSeq && isOpen();
     setTitle(title ?? "Assembling…");
     clear(body).append(loadingView());
     dossier
       .then((d) => {
+        if (!current()) return; // a newer open() (or a close) superseded this fetch
         setTitle(title ?? d?.unit?.id ?? "Evidence");
         clear(body).append(renderDossier(d));
       })
       .catch((err) => {
+        if (!current()) return;
         setTitle("Evidence");
         clear(body).append(errorView(err));
       });
   } else if (dossier) {
+    openSeq++; // a sync open supersedes any in-flight async one
     setTitle(title ?? dossier?.unit?.id ?? "Evidence");
     clear(body).append(renderDossier(dossier));
   }
@@ -99,7 +113,9 @@ export function openUnit(unitId) {
 }
 
 export function close() {
+  openSeq++; // invalidate any in-flight dossier so it can't paint into a closed panel
   appRoot?.setAttribute("data-inspector", "closed");
+  if (host) host.inert = true; // pull the hidden panel's controls out of the tab order
   bus.emit("inspector:close", {});
   if (lastTrigger?.isConnected) lastTrigger.focus();
   lastTrigger = null;
@@ -115,9 +131,15 @@ export function initEvidenceDelegation(fetcher) {
   fetcherFn = fetcher;
   document.addEventListener("click", onDoor);
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter") return;
+    // Enter AND Space both activate a focusable non-native door (e.g. an SVG
+    // role="button" cell), matching native button semantics. Space also scrolls
+    // the page by default, so it must be prevented when it activates a door.
+    if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
     const door = e.target?.closest?.("[data-evidence]");
-    if (door && door.tagName !== "BUTTON" && door.tagName !== "A") onDoor(e);
+    if (door && door.tagName !== "BUTTON" && door.tagName !== "A") {
+      if (e.key !== "Enter") e.preventDefault();
+      onDoor(e);
+    }
   });
   return () => document.removeEventListener("click", onDoor);
 }
@@ -138,6 +160,8 @@ function onDoor(e) {
 function openList(ids, total = null) {
   if (!host) init({});
   appRoot?.setAttribute("data-inspector", "open");
+  if (host) host.inert = false;
+  openSeq++; // a list view supersedes any in-flight single-unit dossier
   setTitle(total ? `${ids.length} of ${total} units` : `${ids.length} units`);
   clear(body).append(
     el("p", { class: "inspector__listnote" },

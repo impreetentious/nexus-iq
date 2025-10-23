@@ -102,20 +102,39 @@ export async function asyncMount(mount, loader, renderFn, loadingLine) {
 /* ---- project loading ---------------------------------------------------------- */
 
 let loadedSlug = null;
+const inflightProject = new Map(); // slug → in-flight fetch, so rapid re-entry loads once
+
+// The slug the app is CURRENTLY routed to (p/:slug/...), or null off a project.
+function routeSlug() {
+  return router.current()?.params?.slug ?? null;
+}
 
 /** Load the project graph into the store (rail + chips follow). Cached per slug. */
 export async function ensureProject(slug) {
   const current = store.get("project");
   if (current?.slug === slug && loadedSlug === slug) return current;
-  const project = await api.projects.get(slug);
-  loadedSlug = slug;
-  store.set("project", project);
+  let load = inflightProject.get(slug);
+  if (!load) {
+    load = api.projects.get(slug).finally(() => inflightProject.delete(slug));
+    inflightProject.set(slug, load);
+  }
+  const project = await load;
+  // Publish to the singleton store ONLY if the app is still on this project's
+  // route. A late resolution from a project we've since navigated away from
+  // must not overwrite the rail / privacy / budget state of the current
+  // screen. Stale callers still receive the value; they just don't clobber
+  // the global store. (asyncMount separately guards the render.)
+  if (routeSlug() === slug) {
+    loadedSlug = slug;
+    store.set("project", project);
+  }
   return project;
 }
 
 /** Re-fetch the graph after a mutation so the rail stays honest. */
 export async function refreshProject(slug) {
   loadedSlug = null;
+  inflightProject.delete(slug);
   return ensureProject(slug);
 }
 
@@ -194,7 +213,13 @@ export function openSheet({ title, overline, wide = false, onClose } = {}) {
     offRoute();
     root.classList.add("sheet--leaving");
     root.removeEventListener("keydown", onKey);
+    // transitionend AND the setTimeout backstop both fire remove(); {once} only
+    // detaches the listener, so without this guard onClose (which may finalize
+    // paid work) runs twice.
+    let removed = false;
     const remove = () => {
+      if (removed) return;
+      removed = true;
       root.remove();
       onClose?.();
       if (opener?.isConnected && typeof opener.focus === "function") opener.focus();
