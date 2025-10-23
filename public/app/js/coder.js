@@ -23,6 +23,7 @@ const state = {
   unit: null,
   inFlight: false,
   fields: null, // {memo, flagBox} for the unit on screen
+  labelControls: null, // keyboard-safe controls for the construct's label type
 };
 
 /* ---- the only two calls this page makes -------------------------------- */
@@ -76,7 +77,8 @@ function codebookPanel() {
       : null,
     cats.length
       ? el("div", {},
-          el("p", { class: "overline coder__bookcats" }, "labels · number keys"),
+          el("p", { class: "overline coder__bookcats" },
+            c.type === "multilabel" ? "labels · number keys toggle, then submit" : "labels · number keys"),
           el("ul", { class: "coder__catlist", role: "list" },
             ...cats.map((cat, i) => el("li", { class: "coder__catrow" },
               el("kbd", {}, String(i + 1)),
@@ -84,6 +86,9 @@ function codebookPanel() {
       : null,
     c.scale
       ? el("p", { class: "coder__bookrule" }, el("strong", {}, "Scale: "), `a number from ${c.scale.min} to ${c.scale.max}`)
+      : null,
+    c.type === "extraction"
+      ? el("p", { class: "coder__bookrule" }, el("strong", {}, "Spans: "), "enter one verbatim span per line; submit an empty list when none apply.")
       : null,
     el("p", { class: "coder__bookrule faint" },
       el("kbd", {}, "u"), " marks a unit you cannot honestly code — it goes to the researcher for adjudication."),
@@ -103,7 +108,73 @@ function cantCodeBtn() {
 
 function controlsFor(construct) {
   const cats = construct?.categories ?? [];
+  if (construct?.type === "multilabel") {
+    // A multilabel construct is a SET, not a one-of-N categorical verdict.
+    // Keep its draft local until the coder explicitly submits it: number keys
+    // toggle options, while the submit button makes an intentional empty set
+    // ("none of these") possible as well.
+    const selected = new Set();
+    const choices = [];
+    const paint = () => {
+      for (const { cat, button } of choices) {
+        const pressed = selected.has(String(cat.value));
+        button.setAttribute("aria-pressed", String(pressed));
+        button.classList.toggle("coder__key--selected", pressed);
+      }
+    };
+    const toggle = (index) => {
+      const choice = choices[index];
+      if (!choice) return;
+      const value = String(choice.cat.value);
+      if (selected.has(value)) selected.delete(value);
+      else selected.add(value);
+      paint();
+    };
+    const save = () => {
+      const labels = cats.filter((cat) => selected.has(String(cat.value))).map((cat) => cat.value);
+      submit({ label: labels });
+    };
+    const form = el("form", {
+      class: "coder__keys coder__keys--multilabel",
+      onsubmit: (e) => { e.preventDefault(); save(); },
+    });
+    cats.forEach((cat, i) => {
+      const button = el("button", {
+        class: "coder__key", type: "button", "aria-pressed": "false",
+        onclick: () => toggle(i),
+      }, el("kbd", {}, String(i + 1)), el("span", {}, cat.label ?? String(cat.value)));
+      choices.push({ cat, button });
+      form.append(button);
+    });
+    form.append(
+      el("button", { class: "btn btn--primary", type: "submit", dataset: { value: "__multilabel__" } }, "Submit selection"),
+      cantCodeBtn(),
+    );
+    state.labelControls = { kind: "multilabel", toggle, paint };
+    return form;
+  }
+  if (construct?.type === "extraction") {
+    // Extraction verdicts use the same array-of-verbatim-spans shape as the
+    // instrument output schema. A blank textarea deliberately submits [],
+    // which means the coder found no matching text rather than skipped a unit.
+    const input = el("textarea", {
+      class: "input textarea coder__freelabel coder__extraction",
+      rows: 4,
+      placeholder: "one verbatim span per line (leave blank for none)",
+      "aria-label": "Extracted verbatim spans — one per line; leave blank when none apply",
+    });
+    state.labelControls = { kind: "extraction", input };
+    return el("form", {
+      class: "coder__keys",
+      onsubmit: (e) => {
+        e.preventDefault();
+        const spans = input.value.split(/\n/).map((span) => span.trim()).filter(Boolean);
+        submit({ label: spans });
+      },
+    }, input, el("button", { class: "btn btn--primary", type: "submit" }, "Submit spans"), cantCodeBtn());
+  }
   if (cats.length) {
+    state.labelControls = { kind: "single" };
     return el("div", { class: "coder__keys", role: "toolbar", aria: { label: "Labels" } },
       ...cats.map((cat, i) => el("button", {
         class: "coder__key", type: "button",
@@ -112,7 +183,7 @@ function controlsFor(construct) {
       }, el("kbd", {}, String(i + 1)), el("span", {}, cat.label ?? String(cat.value)))),
       cantCodeBtn());
   }
-  // continuous (scale) and free-text constructs: one field, Enter submits
+  // Continuous scales and any legacy free-text construct: one field, Enter submits.
   const scale = construct?.scale ?? null;
   const input = el("input", {
     class: "input coder__freelabel",
@@ -121,6 +192,7 @@ function controlsFor(construct) {
     placeholder: scale ? `${scale.min}–${scale.max}` : "label…",
     "aria-label": scale ? `Label — a number from ${scale.min} to ${scale.max}` : "Label",
   });
+  state.labelControls = { kind: scale ? "continuous" : "free", input };
   return el("form", {
     class: "coder__keys",
     onsubmit: (e) => {
@@ -150,6 +222,7 @@ function workPanel() {
   });
   const flagBox = el("input", { type: "checkbox", "aria-label": "Flag this unit for the researcher" });
   state.fields = { memo, flagBox };
+  state.labelControls = null;
 
   return el("section", { class: "coder__work" },
     el("div", { class: "coder__progress" },
@@ -183,6 +256,7 @@ function render() {
 function renderDone() {
   const p = state.progress ?? {};
   state.fields = null;
+  state.labelControls = null;
   clear(mount).append(el("div", { class: "coder__done" },
     el("p", { class: "coder__doneline" }, "Your coding pass is complete — hand back to the researcher."),
     el("p", { class: "faint" },
@@ -194,6 +268,7 @@ function renderDone() {
 
 function renderLoadError(err) {
   state.fields = null;
+  state.labelControls = null;
   clear(mount).append(el("div", { class: "coder__error", role: "alert" },
     el("p", {}, `Could not load the coding queue: ${err.message}.`),
     el("p", { class: "faint" }, "The researcher's Nexus IQ session may have ended — ask them to start it again."),
@@ -275,9 +350,17 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "u") { submit({ uncodable: true }); return; }
   if (e.key === "f" && state.fields) { state.fields.flagBox.checked = !state.fields.flagBox.checked; return; }
   if (e.key === "m" && state.fields) { e.preventDefault(); state.fields.memo.focus(); return; }
+  if (state.labelControls?.kind === "multilabel") {
+    const number = Number(e.key);
+    if (Number.isInteger(number) && number >= 1 && number <= 9) {
+      e.preventDefault();
+      state.labelControls.toggle(number - 1);
+    }
+    return;
+  }
   const cats = state.construct?.categories ?? [];
   const num = Number(e.key);
-  if (Number.isInteger(num) && num >= 1 && num <= cats.length) submit({ label: cats[num - 1].value });
+  if (Number.isInteger(num) && num >= 1 && num <= Math.min(cats.length, 9)) submit({ label: cats[num - 1].value });
 });
 
 load();

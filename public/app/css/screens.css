@@ -1084,8 +1084,14 @@
 }
 .sprint__key:hover { border-color: var(--gold); }
 .sprint__key--hit { border-color: var(--gold); background: var(--gold-wash); }
+.sprint__key--selected,
+.sprint__key[aria-pressed="true"] { border-color: var(--gold); background: var(--gold-wash); box-shadow: inset 0 0 0 1px var(--gold); }
 .sprint__key--meta { opacity: 0.8; }
 .sprint__keylabel { white-space: nowrap; }
+.sprint__numeric-form { display: inline-flex; align-items: center; gap: var(--s2); }
+.sprint__number { width: 10rem; }
+.sprint__extraction-form { display: inline-flex; align-items: center; gap: var(--s2); }
+.sprint__extraction { width: min(28rem, 58vw); resize: vertical; }
 
 .sprint__done {
   padding-top: clamp(var(--s7), 18vh, 9rem);
@@ -1806,8 +1812,11 @@
 }
 .coder__key:hover { border-color: var(--gold); }
 .coder__key--hit { border-color: var(--gold); background: var(--gold-wash); }
+.coder__key--selected,
+.coder__key[aria-pressed="true"] { border-color: var(--gold); background: var(--gold-wash); box-shadow: inset 0 0 0 1px var(--gold); }
 .coder__key--meta { opacity: 0.8; }
 .coder__freelabel { width: 11rem; }
+.coder__extraction { width: min(30rem, 100%); resize: vertical; }
 
 .coder__extras {
   margin-top: var(--s5);

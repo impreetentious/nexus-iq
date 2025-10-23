@@ -362,7 +362,7 @@ test("validation: category constructs refuse unknown labels (naming the valid va
   await ok("POST", G(`/${gs.id}/label`), { coder: "ann", unitId: ub, uncodable: true });
 });
 
-test("validation: continuous constructs enforce the scale bounds; extraction stays free", async () => {
+test("validation: continuous constructs enforce the scale bounds; extraction accepts legacy free text and span arrays", async () => {
   const cgs = await ok("POST", G(), { constructId: S.contId, corpusId: S.corpusId });
   const cs = await ok("POST", G(`/${cgs.id}/sample`), { design: "srs", n: 2 });
   const [ca, cb] = cs.sample.map((s) => s.unitId);
@@ -378,6 +378,7 @@ test("validation: continuous constructs enforce the scale bounds; extraction sta
   const egs = await ok("POST", G(), { constructId: S.extId, corpusId: S.corpusId });
   const es = await ok("POST", G(`/${egs.id}/sample`), { design: "srs", n: 1 });
   await ok("POST", G(`/${egs.id}/label`), { coder: "ann", unitId: es.sample[0].unitId, label: "any free text stays legal" });
+  await ok("POST", G(`/${egs.id}/label`), { coder: "ann", unitId: es.sample[0].unitId, label: ["exact phrase", "another exact phrase"] });
 });
 
 // =========================================================================

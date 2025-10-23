@@ -472,7 +472,14 @@ function codePane(host, params, goldset, construct) {
         },
       }, "Begin the sprint")),
     el("p", { class: "screen__hint faint" },
-      "Full bleed. ", kbd("j"), "/", kbd("k"), " next/previous · ", kbd("1"), "–", kbd("9"), " label · ",
+      "Full bleed. ", kbd("j"), "/", kbd("k"), " next/previous · ",
+      construct?.type === "multilabel"
+        ? [kbd("1"), "–", kbd("9"), " toggle labels, then submit the selection · "]
+        : construct?.type === "continuous"
+          ? "enter a bounded numeric label and submit · "
+          : construct?.type === "extraction"
+            ? "enter one verbatim span per line, then submit · "
+          : [kbd("1"), "–", kbd("9"), " label · "],
       kbd("u"), " can't code · ", kbd("f"), " flag · ", kbd("m"), " memo · ", kbd("Esc"), " leave. The definition stays pinned.")));
 }
 
@@ -483,6 +490,7 @@ function continuingCoder(goldset) {
 
 function startSprint(params, goldset, construct, coder) {
   const categories = construct?.categories ?? [];
+  const constructType = construct?.type ?? null;
   const total = goldset.sample.length;
   /* The sprint's unit source is the BLIND coder route (GET goldsets/:g/next):
      one fetch returns this coder's remaining queue as {id, text, pos} plus
@@ -535,15 +543,92 @@ function startSprint(params, goldset, construct, coder) {
       el("p", { class: "sprint__defrule" },
         kbd("u"), " marks a unit as uncodable — it is excluded from agreement statistics and queued for adjudication.")));
 
-  const keyRow = el("div", { class: "sprint__keys", role: "toolbar", aria: { label: "Labels" } },
-    ...categories.map((cat, i) =>
+  const keyRow = el("div", { class: "sprint__keys", role: "toolbar", aria: { label: "Labels" } });
+  const selectedLabels = new Set();
+  const selectionButtons = [];
+  let continuousInput = null;
+  let extractionInput = null;
+
+  const paintSelection = () => {
+    for (const { cat, button } of selectionButtons) {
+      const pressed = selectedLabels.has(String(cat.value));
+      button.setAttribute("aria-pressed", String(pressed));
+      button.classList.toggle("sprint__key--selected", pressed);
+    }
+  };
+  const toggleSelection = (index) => {
+    const choice = selectionButtons[index];
+    if (!choice) return;
+    const value = String(choice.cat.value);
+    if (selectedLabels.has(value)) selectedLabels.delete(value);
+    else selectedLabels.add(value);
+    paintSelection();
+  };
+  const submitSelection = () => {
+    label(categories.filter((cat) => selectedLabels.has(String(cat.value))).map((cat) => cat.value));
+  };
+
+  if (constructType === "multilabel") {
+    for (const [i, cat] of categories.entries()) {
+      const button = el("button", {
+        class: "sprint__key", type: "button", "aria-pressed": "false",
+        onclick: () => toggleSelection(i),
+      }, el("kbd", {}, String(i + 1)), el("span", { class: "sprint__keylabel" }, cat.label ?? cat.value));
+      selectionButtons.push({ cat, button });
+      keyRow.append(button);
+    }
+    keyRow.append(el("button", {
+      class: "btn btn--primary", type: "button", dataset: { value: "__multilabel__" },
+      onclick: submitSelection,
+    }, "Submit selection"));
+  } else if (constructType === "continuous") {
+    continuousInput = el("input", {
+      class: "input sprint__number", type: "number", min: construct?.scale?.min,
+      max: construct?.scale?.max, step: "any",
+      placeholder: construct?.scale ? `${construct.scale.min}–${construct.scale.max}` : "number",
+      "aria-label": construct?.scale
+        ? `Label — a number from ${construct.scale.min} to ${construct.scale.max}`
+        : "Numeric label",
+    });
+    keyRow.append(el("form", {
+      class: "sprint__numeric-form",
+      onsubmit: (e) => {
+        e.preventDefault();
+        const raw = continuousInput.value.trim();
+        if (raw === "") { continuousInput.focus(); return; }
+        const value = Number(raw);
+        if (!Number.isFinite(value)) { continuousInput.focus(); return; }
+        label(value);
+      },
+    }, continuousInput, el("button", { class: "btn btn--primary", type: "submit", dataset: { value: "__continuous__" } }, "Submit value")));
+  } else if (constructType === "extraction") {
+    // Keep manual verdicts type-compatible with judge outputs: an ordered
+    // array of verbatim spans. An empty array is an intentional "none found"
+    // label, not an incomplete submission.
+    extractionInput = el("textarea", {
+      class: "input textarea sprint__extraction", rows: 3,
+      placeholder: "one verbatim span per line (leave blank for none)",
+      "aria-label": "Extracted verbatim spans — one per line; leave blank when none apply",
+    });
+    keyRow.append(el("form", {
+      class: "sprint__extraction-form",
+      onsubmit: (e) => {
+        e.preventDefault();
+        const spans = extractionInput.value.split(/\n/).map((span) => span.trim()).filter(Boolean);
+        label(spans);
+      },
+    }, extractionInput, el("button", { class: "btn btn--primary", type: "submit", dataset: { value: "__extraction__" } }, "Submit spans")));
+  } else {
+    keyRow.append(...categories.map((cat, i) =>
       el("button", {
         class: "sprint__key", type: "button",
         dataset: { value: cat.value },
         onclick: () => label(cat.value),
       },
         el("kbd", {}, String(i + 1)),
-        el("span", { class: "sprint__keylabel" }, cat.label ?? cat.value))),
+        el("span", { class: "sprint__keylabel" }, cat.label ?? cat.value))));
+  }
+  keyRow.append(
     el("button", {
       class: "sprint__key sprint__key--meta", type: "button",
       dataset: { value: UNCODABLE },
@@ -592,10 +677,15 @@ function startSprint(params, goldset, construct, coder) {
     clear(unitHost);
     flagged = false;
     memoText = "";
+    selectedLabels.clear();
+    paintSelection();
+    if (continuousInput) continuousInput.value = "";
+    if (extractionInput) extractionInput.value = "";
     const id = currentUnitId();
     if (!id) { complete(); return; }
     unitHost.append(el("p", { class: "faint data sprint__unitid" }, id));
     unitHost.append(el("blockquote", { class: "sprint__text" }, texts.get(id)?.text ?? "(unit text unavailable)"));
+    (continuousInput ?? extractionInput)?.focus();
   }
 
   async function label(value) {
@@ -639,7 +729,11 @@ function startSprint(params, goldset, construct, coder) {
   }
 
   function pulseKey(value) {
-    const btn = keyRow.querySelector(`[data-value="${CSS.escape(value)}"]`);
+    const key = Array.isArray(value) ? "__multilabel__"
+      : constructType === "continuous" ? "__continuous__"
+        : constructType === "extraction" ? "__extraction__"
+        : String(value);
+    const btn = keyRow.querySelector(`[data-value="${CSS.escape(key)}"]`);
     btn?.classList.add("sprint__key--hit");
     setTimeout(() => btn?.classList.remove("sprint__key--hit"), 220);
   }
@@ -676,9 +770,12 @@ function startSprint(params, goldset, construct, coder) {
     if (e.key === "f") { flag(); return; }
     if (e.key === "m") { memo(); return; }
     const num = Number(e.key);
-    if (num >= 1 && num <= categories.length) {
-      label(categories[num - 1].value);
+    if (constructType === "multilabel" && Number.isInteger(num) && num >= 1 && num <= Math.min(categories.length, 9)) {
+      e.preventDefault();
+      toggleSelection(num - 1);
+      return;
     }
+    if (Number.isInteger(num) && num >= 1 && num <= Math.min(categories.length, 9)) label(categories[num - 1].value);
   }
   document.addEventListener("keydown", onKey);
 
