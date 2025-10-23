@@ -348,6 +348,8 @@ export const runs = {
   resume: (p, r) => post(`${P(p)}/runs/${encodeURIComponent(r)}/resume`),
   abort: (p, r) => post(`${P(p)}/runs/${encodeURIComponent(r)}/abort`),
   escalations: (p, r) => get_(`${P(p)}/runs/${encodeURIComponent(r)}/escalations`),
+  /** Director-proposed, researcher-approved next analyses for a completed run. */
+  analysisSuggestions: (p, r) => post(`${P(p)}/runs/${encodeURIComponent(r)}/analysis-suggestions`),
   disagreement: (p, r) => get_(`${P(p)}/runs/${encodeURIComponent(r)}/disagreement`),
   /** Raw-stream labeled-data CSV (original columns + label/confidence/escalated);
       the server names the file, with -partial for incomplete runs. */

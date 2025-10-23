@@ -1,6 +1,6 @@
 {
   "name": "nexus-iq",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "Nexus IQ – qualitative text measurement platform built with Next.js.",
   "type": "module",
   "license": "MIT",

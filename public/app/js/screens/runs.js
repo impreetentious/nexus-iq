@@ -344,6 +344,75 @@ function renderDetail(mount, params) {
           : null,
     ]));
 
+    // The analyst is a proposal surface, never an auto-run. A completed run
+    // can ask the configured Director for a small set of evidence-linked
+    // questions; the researcher may dismiss each suggestion or explicitly
+    // materialize it as a normal Workbench analysis.
+    if (run.status === "complete") {
+      const suggestionHost = el("div", {});
+      const suggestBtn = el("button", {
+        class: "btn", type: "button",
+        disabled: !project.director,
+        title: project.director ? "Ask the Director for evidence-linked next analyses" : "Configure a Director in Settings first",
+        onclick: async () => {
+          suggestBtn.disabled = true;
+          clear(suggestionHost).append(el("p", { class: "faint", role: "status" }, "Reading the run and proposing questions…"));
+          try {
+            const result = await api.runs.analysisSuggestions(params.slug, run.id);
+            renderSuggestions(result?.suggestions ?? []);
+          } catch (err) {
+            clear(suggestionHost).append(emptyState({ title: "Suggestions unavailable.", body: String(err.message ?? err) }));
+            suggestBtn.disabled = false;
+          }
+        },
+      }, "Suggest analyses");
+      suggestionHost.append(el("p", { class: "screen__hint faint" }, project.director
+        ? "The Director proposes questions from this run's labels, metadata, and a small output sample. Nothing is computed or saved until you choose a suggestion."
+        : "Configure a Director in Settings to receive optional, evidence-linked analysis proposals."));
+      mount.append(section("Analysis suggestions", suggestionHost, suggestBtn));
+
+      function renderSuggestions(suggestions) {
+        clear(suggestionHost);
+        if (!suggestions.length) {
+          suggestionHost.append(el("p", { class: "faint" }, "No supported analysis stands out from this run's available metadata."));
+          return;
+        }
+        for (const suggestion of suggestions) {
+          const card = el("article", { class: "annotation annotation--still" });
+          const evidence = (suggestion.evidenceRefs ?? []).map((unitId) => el("button", {
+            class: "refchip data evidence-door", type: "button", dataset: { evidence: unitId },
+          }, unitId));
+          const useBtn = el("button", {
+            class: "btn btn--primary", type: "button",
+            onclick: async () => {
+              useBtn.disabled = true;
+              try {
+                const spec = {
+                  ...(suggestion.spec ?? {}),
+                  runId: run.id,
+                  instrumentId: suggestion.spec?.instrumentId ?? run.instrumentId,
+                  corpusId: suggestion.spec?.corpusId ?? run.corpusId,
+                };
+                const analysis = await api.analyses.create(params.slug, { kind: suggestion.kind, spec });
+                location.hash = `#/p/${params.slug}/analyses/${analysis.id}`;
+              } catch (err) {
+                useBtn.disabled = false;
+                toast.error("Could not create that analysis.", { detail: String(err.message ?? err) });
+              }
+            },
+          }, "Use suggestion");
+          card.append(
+            el("p", {}, el("span", { class: "chip chip--ghost" }, suggestion.kind), " ", suggestion.annotation),
+            evidence.length ? el("p", { class: "screen__hint faint" }, "Prompted by: ", evidence) : null,
+            el("div", { class: "actionrow" }, useBtn, el("button", {
+              class: "btn btn--quiet", type: "button", onclick: () => card.remove(),
+            }, "Dismiss")),
+          );
+          suggestionHost.append(card);
+        }
+      }
+    }
+
     /* -- the persisted failure/pause reason: run.error {code, message}. The
        failed lede says "see the warnings below", so the stored error must
        actually render — both here and in the warnings feed. -- */

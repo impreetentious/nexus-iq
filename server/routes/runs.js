@@ -17,11 +17,12 @@ import { estimateRun, checkBudget } from "../providers/costs.js";
 import * as engineMod from "../runs/engine.js";
 import * as monitor from "../runs/monitor.js";
 import { makeEscalator } from "../director/escalate.js";
+import { suggestAnalyses } from "../director/analyst.js";
 import { directorCosts } from "../director/director.js";
 import { entropy as panelEntropy } from "../instruments/panel.js";
 import {
   findOr404, requireBody, pdirOf, readCorpusUnits, unitsById, readGoldset,
-  goldLabelMap, addSpend, readNdjson, runOutputsFile, round6, labelKey,
+  goldLabelMap, addSpend, readNdjson, runOutputsFile, round6, labelKey, withDirectorSpend,
   writeJsonAtomic, corpusDisplayName, validateName,
 } from "./_shared.js";
 // the replication archive's CSV writer is the single home for RFC-4180
@@ -523,6 +524,35 @@ export default [
       const project = await loadProject(params.p);
       findOr404(project.runs, params.r, "run");
       return readNdjson(runOutputsFile(params.p, params.r), { filter: (o) => o.escalated === true });
+    },
+  },
+  {
+    // Existing Director analyst work is deliberately on-demand: suggestions
+    // are never auto-created analyses, and a researcher can dismiss each one
+    // before deciding to materialize it in the Workbench.
+    method: "POST",
+    pattern: "/api/projects/:p/runs/:r/analysis-suggestions",
+    handler: async (req, res, params) => {
+      const project = await loadProject(params.p);
+      const run = findOr404(project.runs, params.r, "run");
+      if (run.status !== "complete") {
+        throw new NexusIQError("VALIDATION", "analysis suggestions need a completed run", { runId: run.id, status: run.status });
+      }
+      if (!project.director) {
+        throw new NexusIQError("CONFIG_MISSING", "Configure a Director in Settings before asking for analysis suggestions.", { runId: run.id });
+      }
+      const instrument = findOr404(project.instruments, run.instrumentId, "instrument");
+      const finalJuror = engineMod.finalJurorOfRun(run, instrument);
+      const outputs = await readNdjson(runOutputsFile(params.p, run.id), {
+        filter: (o) => o.juror === finalJuror && o.label !== undefined,
+        limit: 80,
+      });
+      if (outputs.length === 0) {
+        throw new NexusIQError("VALIDATION", "this completed run has no labeled outputs to analyze", { runId: run.id });
+      }
+      const suggestions = await withDirectorSpend(project,
+        () => suggestAnalyses(project, run, outputs));
+      return { suggestions };
     },
   },
   {
