@@ -147,6 +147,21 @@ function startExecution(slug, runId, { escalate, slot } = {}) {
       dir0 = directorCosts(project).usd;
     } catch { /* metered roll-up degrades gracefully */ }
 
+    // Enforce the PROJECT cap throughout execution, not just at admission. The
+    // engine re-checks every unit; hand it the live project ceiling so retries,
+    // escalation, and estimate error abort the run cleanly (resumably) instead
+    // of overrunning the cap the way the estimate-only START gate allowed.
+    // Baseline excludes this run's prior cost (already in spentUSD); meterExtra
+    // feeds the engine this run's live Director-escalation delta so those
+    // dollars count against the cap too. Snapshot-based: concurrent runs still
+    // race on spentUSD (the deeper reservation fix is a separate change).
+    const budgetOpts = {};
+    if (projectForMeter && (projectForMeter.budget?.capUSD ?? null) !== null) {
+      budgetOpts.projectCapUSD = projectForMeter.budget.capUSD;
+      budgetOpts.projectSpentBaseline = Math.max(0, (projectForMeter.budget.spentUSD ?? 0) - cost0);
+      budgetOpts.meterExtra = () => Math.max(0, directorCosts(projectForMeter).usd - dir0);
+    }
+
     let outcome;
     try {
       // pause/abort land through shouldStop: the engine stops dispatching,
@@ -154,6 +169,7 @@ function startExecution(slug, runId, { escalate, slot } = {}) {
       // by the time this resolves, the status is already on disk
       const run = await engineMod.executeRun(slug, runId, {
         ...(escalate ? { escalate } : {}),
+        ...budgetOpts,
         shouldStop: () => st.control,
         onTick: (s) => {
           st.last = s;

@@ -295,6 +295,52 @@ test("executeRun: quarantined units' attempts reach run.cost; successful units m
   assert.equal(done.cost.actualUSD, 0.88, "quarantined spend reaches run.cost.actualUSD (8 attempts × $0.11)");
 });
 
+test("executeRun: the PROJECT cap aborts mid-flight even with no per-run cap, and resumes exactly-once once raised", async (t) => {
+  const slug = "meter-project-cap";
+  const N = 30;
+  const units = makeUnits(N);
+  const project = await setup(slug, { units, instruments: [judgeInstrument()] });
+  mock.setAccuracy(1.0);
+  mock.setOracle(ORACLE);
+  fixUsage(t);   // 100 in / 10 out per attempt → deterministic per-unit cost
+  patchPricing(t); // $1000 per 1M tokens → each unit costs exactly $0.11
+
+  // A fresh run with NO per-run cap but a PROJECT cap of $1.00. The admission
+  // gate lives in the route; the engine itself must abort partway — this is the
+  // enforcement the estimate-only start gate lacked. Cache is cold (no prior
+  // run), so every judged unit really bills $0.11: abort once spend ≥ $1.00.
+  const run = await engineMod.createRun(project, { instrumentId: "inst_j", corpusId: "c1" });
+  const capped = await engineMod.executeRun(slug, run.id, {
+    concurrency: 1,
+    projectCapUSD: 1.0,
+    projectSpentBaseline: 0,
+  });
+  assert.equal(capped.status, "aborted", "the project cap aborts the run with no per-run cap set");
+  assert.equal(capped.checkpoint.done, 10, "aborted the dispatch after spend first reached the $1.00 cap (10 × $0.11)");
+  assert.ok(capped.cost.actualUSD >= 1.0 && capped.cost.actualUSD < N * 0.11, "spent past the cap but well short of the full corpus");
+
+  // the baseline counts prior project spend: a run whose baseline ALONE meets
+  // the cap does no work at all
+  const run0 = await engineMod.createRun(project, { instrumentId: "inst_j", corpusId: "c1" });
+  const blocked = await engineMod.executeRun(slug, run0.id, {
+    concurrency: 1,
+    projectCapUSD: 5,
+    projectSpentBaseline: 5, // already at the cap before this run spends a cent
+  });
+  assert.equal(blocked.status, "aborted");
+  assert.equal(blocked.checkpoint.done, 0, "a run that starts already at the cap judges nothing");
+
+  // resume with headroom → completes; outputs are exactly-once across the abort
+  const resumed = await engineMod.executeRun(slug, run.id, {
+    concurrency: 1,
+    projectCapUSD: 100,
+    projectSpentBaseline: 0,
+  });
+  assert.equal(resumed.status, "complete", "raised cap → the resume finishes the run");
+  const lines = await readNdjson(outputsFile(slug, run.id));
+  assert.equal(lines.length, N, "exactly-once outputs across the capped abort + resume");
+});
+
 // ================================================================ item 2: resume budget re-check
 
 function routeHandler(routes, method, pattern) {

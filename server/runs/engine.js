@@ -666,6 +666,25 @@ async function executeRunInner(project, run, opts) {
   const p99 = p99Length(units);
   const capUSD = opts.capUSD ?? run.capUSD ?? null;
 
+  // Two budget ceilings, both re-checked every unit dispatch (the START/RESUME
+  // gate is admission-only — an estimate can't bound retries, escalation, or a
+  // frontier worker's real token bill). The PER-RUN cap bounds this run's own
+  // worker spend. The PROJECT cap bounds cumulative project spend, and must
+  // include Director escalation dollars (metered out-of-band via meterExtra) —
+  // otherwise a run with cheap workers but many escalations sails past a
+  // project cap the engine never watched. Baseline = project spend BEFORE this
+  // run (its prior cost is already in spentUSD), so baseline + this run's
+  // worker + Director spend is the live project total.
+  const projectCapUSD = opts.projectCapUSD ?? null;
+  const projectBaselineUSD = opts.projectSpentBaseline ?? 0;
+  const meterExtra = typeof opts.meterExtra === "function" ? opts.meterExtra : () => 0;
+  const overBudget = () => {
+    if (capUSD !== null && run.cost.actualUSD >= capUSD) return "run";
+    if (projectCapUSD !== null
+      && projectBaselineUSD + run.cost.actualUSD + Math.max(0, meterExtra()) >= projectCapUSD) return "project";
+    return null;
+  };
+
   // resume state from the outputs file: who already has which lines
   const existing = await readNdjson(outputsFile);
   const byUnit = new Map(); // unitId → Map(juror → output line)
@@ -757,7 +776,7 @@ async function executeRunInner(project, run, opts) {
       return false;
     }
     syncCost();
-    if (capUSD !== null && run.cost.actualUSD >= capUSD) {
+    if (overBudget()) {
       stop.reason = "aborted";
       return false;
     }
