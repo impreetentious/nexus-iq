@@ -27,6 +27,11 @@ export function render(mount) {
         title: "Projects",
         lede: "Each project is a portable folder containing its corpus, codebook, instruments, gold, and ledger. Copy the folder to copy the whole study.",
         actions: [
+          el("button", { class: "btn btn--quiet", type: "button", onclick: () => {
+            import("../components/demo.js").then((m) => m.startGuidedDemo()).catch((err) => {
+              toast.error("Could not open the demo.", { detail: String(err.message ?? err) });
+            });
+          } }, "Guided MockModel demo"),
           el("button", { class: "btn btn--primary", type: "button", onclick: () => newProjectSheet() }, "New project"),
         ],
       }),

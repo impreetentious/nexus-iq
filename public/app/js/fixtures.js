@@ -1034,8 +1034,53 @@ function patch() {
   };
 
   /* -- catalog / settings / health -- */
-  // live: {providers: {name: [models]}, cachedAt}
-  apiNs.catalog.models = async () => clone(db.catalog);
+  // live: {providers, cachedAt, freshness}; refresh busts the stamp clock
+  apiNs.catalog.models = async ({ refresh } = {}) => {
+    const cat = clone(db.catalog);
+    if (!cat.freshness) {
+      cat.freshness = {
+        cachedAt: cat.cachedAt ?? new Date().toISOString(),
+        staleAfterDays: cat.staleAfterDays ?? 90,
+        policy: "estimate-ok-stale-not",
+      };
+    }
+    if (refresh) cat.freshness.cachedAt = new Date().toISOString();
+    return cat;
+  };
+  Object.assign(apiNs.demo, {
+    status: async () => ({
+      available: true,
+      csvPresent: true,
+      projectExists: true,
+      slug: "techcorp-exit",
+    }),
+    reset: async () => ({
+      slug: "techcorp-exit",
+      corpusId: P.corpora?.[0]?.id ?? "corp_fixtures",
+      unitCount: 20,
+      skipped: 0,
+      steps: [
+        "Draft a construct from a corpus sample",
+        "Compile an instrument from the drafted construct",
+        "Preview the instrument against a handful of units",
+        "Freeze the instrument once agreement stabilizes",
+        "Kick off a MockModel run across the full corpus",
+      ],
+    }),
+  });
+  Object.assign(apiNs.diagnostics, {
+    system: async () => ({
+      version: "1.0.0-fixtures",
+      node: "fixtures",
+      platform: "fixtures",
+      uptimeMs: 0,
+      providers: { anthropic: true, openai: true, openrouter: false, ollama: true, mock: true },
+      projectsCount: 1,
+      bundleFormat: 1,
+    }),
+    supportBundleUrl: () => "#",
+    downloadSupportBundle: () => {},
+  });
   // live: {keys: {name: {configured, apiKey?, baseUrl?}}, port}
   apiNs.settings.get = async () => clone(db.settings);
   // live PUT: accepts {keys}, {port}, {project: {slug, director, privacyMode,

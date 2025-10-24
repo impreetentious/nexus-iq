@@ -424,7 +424,29 @@ export const exports = {
 };
 
 export const catalog = {
-  models: () => get_("/api/catalog/models"),
+  /**
+   * The aggregated model catalog. `{refresh: true}` sets ?refresh=1 which
+   * busts BOTH the catalog route's 1h page cache AND each adapter's own 1h
+   * live-list cache — the wizard's "Refresh" button uses this so a manual
+   * refresh actually re-fetches. Response carries a top-level `freshness`
+   * envelope ({cachedAt, staleAfterDays, policy}) plus per-model
+   * `pricingVerifiedAt` where the static table set it — "estimate: true,
+   * stale: not" is the pricing policy.
+   */
+  models: ({ refresh } = {}) => get_("/api/catalog/models", { query: refresh ? { refresh: 1 } : undefined }),
+};
+
+export const demo = {
+  /** {available, csvPresent, projectExists, slug}. */
+  status: () => get_("/api/demo/status"),
+  /**
+   * Wipe and rebuild the guided demo project → {slug, corpusId, unitCount,
+   * skipped, steps: [...]}. `{sampleRows: N}` truncates the parsed rows
+   * before unitize (tests use this to keep the ingest cheap); omit for the
+   * full CSV.
+   */
+  reset: ({ sampleRows } = {}) =>
+    post("/api/demo/reset", sampleRows === undefined ? {} : { sampleRows }),
 };
 
 export const settings = {
@@ -432,11 +454,34 @@ export const settings = {
   update: (s) => put("/api/settings", s),
 };
 
+export const diagnostics = {
+  /** System diagnostics — {version, node, platform, uptimeMs, providers,
+   *  projectsCount, bundleFormat}. No project scope; the standard envelope
+   *  applies (resolves with data). */
+  system: () => get_("/api/diagnostics"),
+  /** URL to the support-bundle ZIP for a project. `includeOutputs: true`
+   *  appends a capped 50-line sample of ONE run's outputs.ndjson (still
+   *  no keys, still no vault). See docs/support-bundle.md. */
+  supportBundleUrl(p, { includeOutputs } = {}) {
+    return `${baseUrl}${P(p)}/diagnostics/support-bundle${qs({ includeOutputs: includeOutputs ? 1 : undefined })}`;
+  },
+  /** Trigger a browser download of the support bundle — the same anchor-
+   *  click pattern the replication/report exports use. */
+  downloadSupportBundle(p, opts) {
+    const a = document.createElement("a");
+    a.href = diagnostics.supportBundleUrl(p, opts);
+    a.download = "";
+    document.body.append(a);
+    a.click();
+    a.remove();
+  },
+};
+
 export const health = () => get_("/api/health");
 
 export const api = {
   projects, imports, corpora, brief, questionbar, constructs, instruments,
-  goldsets, runs, analyses, evidence, reliability, report, exports, catalog, settings, health,
+  goldsets, runs, analyses, evidence, reliability, report, exports, catalog, demo, settings, diagnostics, health,
 };
 
 export default api;
