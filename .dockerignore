@@ -9,7 +9,6 @@ config/*
 projects/*
 !projects/.gitkeep
 tests/
-demo/
 *.log
 npm-debug.log*
 yarn-debug.log*

@@ -1,10 +1,10 @@
 {
   "name": "nexus-iq",
-  "version": "2.4.3",
-  "description": "Nexus IQ – qualitative text measurement platform built with Next.js.",
+  "version": "2.5.0",
+  "description": "Local-first qualitative text measurement platform.",
   "type": "module",
   "license": "MIT",
-  "private": false,
+  "private": true,
   "engines": {
     "node": ">=20.10"
   },
@@ -32,5 +32,14 @@
   },
   "overrides": {
     "postcss": "^8.5.6"
-  }
+  },
+  "author": "Sidakpreet Singh",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ItsMonarch04/nexus-iq.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ItsMonarch04/nexus-iq/issues"
+  },
+  "homepage": "https://github.com/ItsMonarch04/nexus-iq#"
 }
