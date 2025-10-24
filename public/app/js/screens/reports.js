@@ -15,6 +15,7 @@ import api from "../api.js";
 import * as toast from "../components/toast.js";
 import * as ladderC from "../components/ladder.js";
 import { store } from "../state.js";
+import * as jobs from "../jobs.js";
 import { screenHead, section, asyncMount, ensureProject, emptyState, mdBlock, downloadText, openSheet } from "./_shared.js";
 
 export const route = "p/:slug/reports";
@@ -130,8 +131,17 @@ export function render(mount, params) {
 
     function downloadReplication() {
       // fixtures mode has no zip stream behind the button — keep its notice
+      const jobId = `export:replication:${params.slug}:${Date.now()}`;
+      jobs.register({
+        id: jobId,
+        kind: "export",
+        label: "Replication archive",
+        detail: "downloading…",
+        href: `p/${params.slug}/reports`,
+      });
       if (typeof api.exports.replicationContents === "function") {
         api.exports.download(params.slug, "replication");
+        jobs.succeed(jobId, { detail: "fixtures notice" });
         return;
       }
       const url = api.exports.replicationUrl(params.slug) + (goldState.includeGoldText ? "" : "?goldText=0");
@@ -141,6 +151,7 @@ export function render(mount, params) {
       document.body.append(a);
       a.click();
       a.remove();
+      jobs.succeed(jobId, { detail: goldState.includeGoldText ? "with gold text" : "goldText=0" });
       toast.success("Replication archive downloading.", {
         detail: goldState.includeGoldText ? "gold rows include unit text" : "goldText=0 — labels/π only, no unit text", data: true,
       });

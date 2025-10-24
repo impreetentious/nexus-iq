@@ -23,6 +23,7 @@ import { store } from "../state.js";
 import api, { ApiError } from "../api.js";
 import { fixturesEnabled } from "../fixtures.js";
 import * as router from "../router.js";
+import * as jobs from "../jobs.js";
 import * as toast from "../components/toast.js";
 import * as table from "../components/table.js";
 import { fmtCount, fmtPct } from "../format.js";
@@ -299,6 +300,14 @@ function renderSheet(mount, params, proposal, file, teardown = []) {
       };
       // read BEFORE the refresh below — was this an additional corpus?
       const hadCorpora = (store.get("project")?.corpora?.length ?? 0) > 0;
+      const jobId = `import:${proposal.importId ?? Date.now()}`;
+      jobs.register({
+        id: jobId,
+        kind: "import",
+        label: `Import ${proposal.filename ?? "corpus"}`,
+        detail: "unitizing…",
+        href: `p/${params.slug}/import`,
+      });
       try {
         // live confirm wants the text column by name + the edited role map
         // (ignore roles only take effect server-side) + the scheme + pii mode
@@ -313,6 +322,7 @@ function renderSheet(mount, params, proposal, file, teardown = []) {
         });
         progress.finish();
         settled();
+        jobs.succeed(jobId, { detail: `${fmtCount(result.unitCount)} units` });
         const junkCounts = result.junkQueue?.counts ?? {};
         const junkTotal = Object.values(junkCounts).reduce((s, n) => s + n, 0);
         const piiLine = piiSummary(result.pii);
@@ -328,6 +338,7 @@ function renderSheet(mount, params, proposal, file, teardown = []) {
       } catch (err) {
         progress.finish();
         settled();
+        jobs.fail(jobId, err);
         confirmBtn.disabled = false;
         bar.replaceChildren(confirmBtn);
         toast.error("Import failed.", { detail: String(err.message ?? err) });

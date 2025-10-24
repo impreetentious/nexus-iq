@@ -22,6 +22,8 @@ import * as renameable from "../components/renameable.js";
 import { contextLine, corpusText } from "../components/contextline.js";
 import { fmtCost, fmtCount, fmtStat, fmtDuration, fmtDateTime } from "../format.js";
 import { screenHead, section, asyncMount, ensureProject, refreshProject, emptyState, openSheet, kv, kvList, normalizeQuarantine, runDisplayName } from "./_shared.js";
+import * as jobs from "../jobs.js";
+import { store } from "../state.js";
 
 export const route = "p/:slug/runs";
 export const routes = ["p/:slug/runs", "p/:slug/runs/:id"];
@@ -215,6 +217,14 @@ async function preflightSheet(params, project, instruments, presetInstrument) {
         startBtn.disabled = true;
         try {
           const { runId } = await api.runs.start(params.slug, { instrumentId, corpusId, capUSD });
+          jobs.register({
+            id: `run:${runId}`,
+            kind: "run",
+            label: `Run ${runId}`,
+            detail: "starting…",
+            href: `p/${params.slug}/runs/${runId}`,
+            progress: { done: 0, total: pf.units ?? 0 },
+          });
           toast.success("Run started.", { detail: runId, data: true });
           await refreshProject(params.slug).catch(() => {});
           s.close();
@@ -514,6 +524,17 @@ function renderDetail(mount, params) {
 
     if (live) {
       monitor?.close?.();
+      const jobId = `run:${run.id}`;
+      if (!jobs.get(jobId)) {
+        jobs.register({
+          id: jobId,
+          kind: "run",
+          label: runDisplayName(store.get("project"), run) || run.id,
+          detail: "monitoring…",
+          href: `p/${params.slug}/runs/${run.id}`,
+          progress: { done: run.checkpoint?.done ?? 0, total: run.checkpoint?.total ?? 0 },
+        });
+      }
       monitor = api.runs.monitor(params.slug, run.id, {
         onTick(t) {
           progFill.style.width = `${(t.done / t.total) * 100}%`;
@@ -523,6 +544,7 @@ function renderDetail(mount, params) {
           paintDist(t.labelDist);
           pushWarnings(t.warnings);
           liveRegion.textContent = `${t.done} of ${t.total} units, ${fmtCost(t.costUSD)}`;
+          jobs.tick(jobId, { done: t.done, total: t.total, detail: `${fmtCost(t.costUSD)} · ${fmtCount(t.done)}/${fmtCount(t.total)}` });
         },
         async onDone(data) {
           // Status-aware: the stream also settles on pause/abort/failure, and
@@ -531,9 +553,13 @@ function renderDetail(mount, params) {
           monitor = null;
           const status = data?.status ?? "complete";
           if (status === "complete") {
+            jobs.succeed(jobId, { detail: "complete" });
             toast.success("Run complete.", { detail: `${run.id} — explore the results`, data: true });
           } else if (status === "failed") {
+            jobs.fail(jobId, data?.error ?? "failed");
             toast.error("Run failed.", { detail: `${run.id} — open it for the error; resume retries unfinished units`, data: true });
+          } else if (status === "paused" || status === "aborted") {
+            jobs.cancel(jobId);
           }
           // Loop guard on the REFRESHED disk status: refetch first, then
           // re-render only when the STORED record actually moved off the
