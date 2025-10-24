@@ -13,7 +13,7 @@
 //   double-counting); the run engine meters every returned attempt, so
 //   quarantined units' spend reaches run.cost.
 //
-// ITEM 2 — resume budget re-check (routes/runs.js):
+// ITEM 2 — resume budget re-check + concurrent reservations (routes/runs.js):
 //   the START gate runs spentUSD + estimate against project.budget.capUSD;
 //   resume used to skip it. Resume now re-estimates the REMAINING units
 //   (total minus done, the engine's own pending-set) and applies the same
@@ -30,7 +30,7 @@ import { completeWithRepair, withTruncationRetry } from "../../server/providers/
 import { estimateRun } from "../../server/providers/costs.js";
 import { callDirector, directorCosts } from "../../server/director/director.js";
 import * as engineMod from "../../server/runs/engine.js";
-import runsRoutes from "../../server/routes/runs.js";
+import runsRoutes, { settleRunBudget } from "../../server/routes/runs.js";
 import { DEFAULT_TEMPLATE } from "../../server/instruments/judge.js";
 import { createProject, createConstruct, createInstrument } from "../../server/core/objects.js";
 import { saveProject, loadProject, updateProject, readNdjson, projectDir } from "../../server/core/store.js";
@@ -443,4 +443,76 @@ test("resume with no project cap stays ungated", async (t) => {
     await sleep(50);
   }
   assert.equal(settled.status, "complete");
+});
+
+test("concurrent starts reserve distinct project headroom atomically and settlement releases only the owning run", async (t) => {
+  const slug = "meter-concurrent-reservation";
+  const units = makeUnits(18);
+  const project = await setup(slug, { units, instruments: [judgeInstrument()] });
+  patchPricing(t);
+
+  // Match the engine's estimate inputs closely enough to choose a cap that
+  // admits exactly one of two identical runs. The definitive check lives in
+  // engine.createRun's locked write, not this local calculation.
+  const estimate = estimateRun({
+    units,
+    template: DEFAULT_TEMPLATE,
+    maxTokens: 64,
+    pricing: { inUSDper1M: 1000, outUSDper1M: 1000 },
+  }).estUSD;
+  assert.ok(estimate > 0);
+  await updateProject(slug, (p) => { p.budget = { capUSD: estimate * 1.5, spentUSD: 0 }; });
+
+  const attempts = await Promise.allSettled([
+    engineMod.createRun(project, { instrumentId: "inst_j", corpusId: "c1" }, { reserveProjectBudget: true }),
+    engineMod.createRun(project, { instrumentId: "inst_j", corpusId: "c1" }, { reserveProjectBudget: true }),
+  ]);
+  const accepted = attempts.filter((x) => x.status === "fulfilled");
+  const refused = attempts.filter((x) => x.status === "rejected");
+  assert.equal(accepted.length, 1, "only one overlapping admission receives the project's remaining headroom");
+  assert.equal(refused.length, 1);
+  assert.equal(refused[0].reason.code, "BUDGET_EXCEEDED");
+
+  const run = accepted[0].value;
+  let stored = await loadProject(slug);
+  assert.equal(stored.runs.length, 1, "the refused admission never leaves a stray pending run");
+  assert.equal(stored.runs[0].projectBudgetReservationUSD, run.cost.estUSD);
+  assert.equal(stored.budget.reservedUSD, run.cost.estUSD);
+  assert.equal(stored.budget.spentUSD, 0);
+
+  await settleRunBudget(slug, run.id, 0.1234567);
+  stored = await loadProject(slug);
+  assert.equal(stored.budget.reservedUSD, 0, "settlement returns this run's reservation");
+  assert.equal(stored.budget.spentUSD, 0.123457, "actual spend is rounded once at the locked roll-up");
+  assert.equal(stored.runs[0].projectBudgetReservationUSD, undefined);
+});
+
+test("completed-run analyst suggestions are on-demand, evidence-filtered, and require explicit materialization", async (t) => {
+  const slug = "meter-analyst-route";
+  const project = await setup(slug, { units: makeUnits(8), instruments: [judgeInstrument()] });
+  await updateProject(slug, (p) => {
+    p.director = { provider: "mock", model: "mock-1", snapshot: "mock-1", systemSuffix: "[[handler:meter-analyst-route]]" };
+  });
+  const fresh = await loadProject(slug);
+  mock.setAccuracy(1.0);
+  mock.setOracle(ORACLE);
+  mock.setHandler("meter-analyst-route", () => ({
+    suggestions: [{
+      kind: "crosstab",
+      spec: { rowKey: "label", colKey: "dept", instrumentId: "inst_j", corpusId: "c1" },
+      annotation: "Compare the observed label distribution across departments.",
+      evidenceRefs: ["u_0000", "u_not_in_the_sample"],
+    }],
+  }));
+  t.after(() => mock.handlers.delete("meter-analyst-route"));
+
+  const run = await engineMod.createRun(fresh, { instrumentId: "inst_j", corpusId: "c1" });
+  await engineMod.executeRun(slug, run.id, { concurrency: 1 });
+  const suggestions = routeHandler(runsRoutes, "POST", "/api/projects/:p/runs/:r/analysis-suggestions");
+  const data = await suggestions({ body: {} }, null, { p: slug, r: run.id });
+
+  assert.equal(data.suggestions.length, 1);
+  assert.deepEqual(data.suggestions[0].evidenceRefs, ["u_0000"], "only real output-sample refs are returned");
+  assert.equal((await loadProject(slug)).analyses.length, 0,
+    "asking for suggestions never auto-creates an analysis artifact");
 });

@@ -69,7 +69,7 @@ import * as cache from "../core/cache.js";
 import { createRun as newRunObject, instrumentVersionHash } from "../core/objects.js";
 import { getAdapter } from "../providers/registry.js";
 import { Pool } from "../providers/base.js";
-import { estimateRun, meter } from "../providers/costs.js";
+import { estimateRun, meter, checkBudget } from "../providers/costs.js";
 import { judgeUnit } from "../instruments/judge.js";
 import { aggregate } from "../instruments/panel.js";
 import { score as dictScore } from "../instruments/dictionary.js";
@@ -508,7 +508,7 @@ function cleanLine(line) {
 // createRun(project, {instrumentId, corpusId, unitFilter?, capUSD?}) → run
 // Validates instrument + corpus, computes the preflight estimate, persists
 // the pending Run into project.runs via updateProject, ledgers run.preflight.
-export async function createRun(project, { instrumentId, corpusId, unitFilter, capUSD, name } = {}, { dir } = {}) {
+export async function createRun(project, { instrumentId, corpusId, unitFilter, capUSD, name } = {}, { dir, reserveProjectBudget = false } = {}) {
   const instrument = findOrThrow(project.instruments, instrumentId, "instrument");
   findOrThrow(project.corpora, corpusId, "corpus");
   constructOf(project, instrument); // must exist before any run is created
@@ -568,6 +568,20 @@ export async function createRun(project, { instrumentId, corpusId, unitFilter, c
   await updateProject(project.slug, (p) => {
     if (!Array.isArray(p.runs)) p.runs = [];
     p.runs.push(run);
+    // A project cap must be admitted under the SAME per-project lock that
+    // records the run. Otherwise two simultaneous starts can both read the
+    // same spentUSD and each reserve the same final dollars. The reservation
+    // is released by the routes layer when this execution settles; actual
+    // spend still remains the durable accounting source of truth.
+    if (reserveProjectBudget && (p.budget?.capUSD ?? null) !== null) {
+      const spentUSD = Number(p.budget?.spentUSD) || 0;
+      const reservedUSD = Math.max(0, Number(p.budget?.reservedUSD) || 0);
+      const reservationUSD = Math.max(0, Number(run.cost?.estUSD) || 0);
+      const cap = p.budget.capUSD;
+      checkBudget(round6(spentUSD + reservedUSD + reservationUSD), cap);
+      p.budget = { ...p.budget, spentUSD, reservedUSD: round6(reservedUSD + reservationUSD) };
+      run.projectBudgetReservationUSD = reservationUSD;
+    }
   }, dir ?? projectsDir());
 
   await ledger.append(pdir, "system", "run.preflight", { runId: run.id, instrumentId, corpusId }, {

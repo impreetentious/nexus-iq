@@ -22,7 +22,7 @@ import { directorCosts } from "../director/director.js";
 import { entropy as panelEntropy } from "../instruments/panel.js";
 import {
   findOr404, requireBody, pdirOf, readCorpusUnits, unitsById, readGoldset,
-  goldLabelMap, addSpend, readNdjson, runOutputsFile, round6, labelKey, withDirectorSpend,
+  goldLabelMap, readNdjson, runOutputsFile, round6, labelKey, withDirectorSpend,
   writeJsonAtomic, corpusDisplayName, validateName,
 } from "./_shared.js";
 // the replication archive's CSV writer is the single home for RFC-4180
@@ -97,6 +97,68 @@ async function estimateInstrument(project, instrument, units) {
 // terminal, promise}. `control` is what the engine's shouldStop hook reads.
 const live = new Map();
 
+const nonNegativeUSD = (value) => Math.max(0, Number(value) || 0);
+
+// Claim a run's estimated remaining spend under the project lock. `spentUSD`
+// records actual settled cost; `reservedUSD` holds active-run headroom so two
+// concurrent starts cannot both spend the same last dollars. The run carries
+// its own share, allowing resume to replace (rather than double) its prior
+// reservation after a crash or a paused session.
+export async function reserveRunBudget(slug, runId, estimateUSD) {
+  let result = { reserved: false, amount: 0 };
+  await updateProject(slug, (p) => {
+    const run = findOr404(p.runs, runId, "run");
+    const capUSD = p.budget?.capUSD ?? null;
+    const prior = nonNegativeUSD(run.projectBudgetReservationUSD);
+    const budget = p.budget ?? { capUSD: null, spentUSD: 0 };
+    const reservedBefore = nonNegativeUSD(budget.reservedUSD);
+    const reservedOther = Math.max(0, round6(reservedBefore - prior));
+
+    if (capUSD === null) {
+      // A cap may have been removed while a paused run retained a reservation.
+      // Release only this run's share; never disturb other active runs.
+      if (prior > 0) {
+        p.budget = { ...budget, reservedUSD: reservedOther };
+        delete run.projectBudgetReservationUSD;
+      }
+      return;
+    }
+
+    const amount = round6(nonNegativeUSD(estimateUSD));
+    const spentUSD = nonNegativeUSD(budget.spentUSD);
+    checkBudget(round6(spentUSD + reservedOther + amount), capUSD);
+    p.budget = { ...budget, spentUSD, reservedUSD: round6(reservedOther + amount) };
+    run.projectBudgetReservationUSD = amount;
+    result = { reserved: true, amount, spentUSD, reservedOther, capUSD };
+  });
+  return result;
+}
+
+// Settle a completed/paused/aborted execution atomically: release its
+// reservation and roll its actual delta into durable spend in one write. A
+// separate release-then-add would reopen the exact headroom race reservation
+// closes for a concurrent start.
+export async function settleRunBudget(slug, runId, spendUSD = 0) {
+  let settled = null;
+  await updateProject(slug, (p) => {
+    const run = findOr404(p.runs, runId, "run");
+    const budget = p.budget ?? { capUSD: null, spentUSD: 0 };
+    const reservation = nonNegativeUSD(run.projectBudgetReservationUSD);
+    const nextReserved = Math.max(0, round6(nonNegativeUSD(budget.reservedUSD) - reservation));
+    const amount = round6(nonNegativeUSD(spendUSD));
+    p.budget = {
+      ...budget,
+      spentUSD: round6(nonNegativeUSD(budget.spentUSD) + amount),
+      reservedUSD: nextReserved,
+    };
+    delete run.projectBudgetReservationUSD;
+    settled = run;
+  });
+  return settled;
+}
+
+const releaseRunBudget = (slug, runId) => settleRunBudget(slug, runId, 0);
+
 function armDrift(project, instrument, runId) {
   // calibrated instruments re-judge certificate gold units every 2000 outputs
   if (!instrument.frozen || !instrument.certificate?.goldsetId) return Promise.resolve();
@@ -150,16 +212,20 @@ function startExecution(slug, runId, { escalate, slot } = {}) {
 
     // Enforce the PROJECT cap throughout execution, not just at admission. The
     // engine re-checks every unit; hand it the live project ceiling so retries,
-    // escalation, and estimate error abort the run cleanly (resumably) instead
-    // of overrunning the cap the way the estimate-only START gate allowed.
-    // Baseline excludes this run's prior cost (already in spentUSD); meterExtra
-    // feeds the engine this run's live Director-escalation delta so those
-    // dollars count against the cap too. Snapshot-based: concurrent runs still
-    // race on spentUSD (the deeper reservation fix is a separate change).
+    // escalation, and estimate error abort the run cleanly instead of
+    // overrunning the cap the estimate-only START gate allowed. The baseline
+    // excludes this run's prior cost (already in spentUSD), but includes OTHER
+    // active runs' atomic reservations so concurrent executions each receive
+    // distinct project headroom.
     const budgetOpts = {};
     if (projectForMeter && (projectForMeter.budget?.capUSD ?? null) !== null) {
+      const storedRun = (projectForMeter.runs ?? []).find((r) => r.id === runId);
+      const ownReservation = nonNegativeUSD(storedRun?.projectBudgetReservationUSD);
+      const reservedOther = Math.max(0,
+        round6(nonNegativeUSD(projectForMeter.budget.reservedUSD) - ownReservation));
       budgetOpts.projectCapUSD = projectForMeter.budget.capUSD;
-      budgetOpts.projectSpentBaseline = Math.max(0, (projectForMeter.budget.spentUSD ?? 0) - cost0);
+      budgetOpts.projectSpentBaseline = Math.max(0,
+        round6(nonNegativeUSD(projectForMeter.budget.spentUSD) - cost0 + reservedOther));
       budgetOpts.meterExtra = () => Math.max(0, directorCosts(projectForMeter).usd - dir0);
     }
 
@@ -205,15 +271,15 @@ function startExecution(slug, runId, { escalate, slot } = {}) {
       }
     }
 
-    // cost roll-up: this execution's run-cost delta plus any Director
-    // escalation spend metered during it
+    // Cost roll-up and reservation release are one locked mutation. This
+    // execution's run-cost delta plus any Director escalation spend moves into
+    // spentUSD exactly as its reserved headroom is returned to the project.
     try {
       const fresh = await loadProject(slug);
       const run = (fresh.runs ?? []).find((r) => r.id === runId);
       const dirDelta = projectForMeter ? Math.max(0, directorCosts(projectForMeter).usd - dir0) : 0;
       const delta = Math.max(0, (run?.cost?.actualUSD ?? 0) - cost0) + dirDelta;
-      if (delta > 0) await addSpend(slug, delta);
-      outcome.run = run ?? null;
+      outcome.run = await settleRunBudget(slug, runId, delta);
     } catch { /* roll-up is best-effort */ }
     outcome.run = (await snapshotRun(slug, runId)) ?? outcome.run ?? null;
 
@@ -259,9 +325,8 @@ async function launchRunValidated(params, runId, slot, resume) {
   // paused was never re-checked — resume could blow straight past it.
   // Re-estimate the REMAINING units only (the engine's own pending-set:
   // units without a final line under the run's pinned juror hash) and apply
-  // the SAME gate — same estimator, same checkBudget, same BUDGET_EXCEEDED
-  // shape the start path produces. Refusal happens BEFORE any status write,
-  // so a refused resume leaves the run exactly as it was.
+  // the SAME atomic reservation gate as start. Refusal happens BEFORE any
+  // status write, so a refused resume leaves the run exactly as it was.
   const units = await readCorpusUnits(params.p, run.corpusId,
     run.unitFilter ? { filter: engineMod.parseUnitFilter(run.unitFilter) } : {});
   const fin = engineMod.finalJurorOfRun(run, instrument);
@@ -270,24 +335,30 @@ async function launchRunValidated(params, runId, slot, resume) {
   );
   const remaining = units.filter((u) => !doneIds.has(u.id));
   const est = await estimateInstrument(project, instrument, remaining);
-  checkBudget((project.budget?.spentUSD ?? 0) + est.estUSD, project.budget?.capUSD ?? null);
-  await armDrift(project, instrument, run.id);
-  const escalate = project.director ? makeEscalator(project, construct) : undefined;
-  // Persist "running" BEFORE answering: the engine runs in the background and
-  // persists at its own pace, so a client that refreshes right after this
-  // response would otherwise read the stale pending/paused status, render a
-  // static screen, and never subscribe to the monitor — runs proceeding
-  // invisibly was a field report. The engine treats running(stale) as
-  // resumable, so this write is always consistent with what follows.
-  await updateProject(params.p, (p) => {
-    const r = (p.runs ?? []).find((x) => x.id === run.id);
-    if (r && r.status !== "complete") {
-      r.status = "running";
-      delete r.error; // a fresh launch clears ORPHANED/paused explanations
-    }
-  });
-  startExecution(params.p, run.id, { escalate, slot });
-  return { runId: run.id, status: "running", resumed: resume };
+  let reservation = false;
+  try {
+    reservation = (await reserveRunBudget(params.p, run.id, est.estUSD)).reserved;
+    await armDrift(project, instrument, run.id);
+    const escalate = project.director ? makeEscalator(project, construct) : undefined;
+    // Persist "running" BEFORE answering: the engine runs in the background and
+    // persists at its own pace, so a client that refreshes right after this
+    // response would otherwise read the stale pending/paused status, render a
+    // static screen, and never subscribe to the monitor — runs proceeding
+    // invisibly was a field report. The engine treats running(stale) as
+    // resumable, so this write is always consistent with what follows.
+    await updateProject(params.p, (p) => {
+      const r = (p.runs ?? []).find((x) => x.id === run.id);
+      if (r && r.status !== "complete") {
+        r.status = "running";
+        delete r.error; // a fresh launch clears ORPHANED/paused explanations
+      }
+    });
+    startExecution(params.p, run.id, { escalate, slot });
+    return { runId: run.id, status: "running", resumed: resume };
+  } catch (err) {
+    if (reservation) await releaseRunBudget(params.p, run.id).catch(() => {});
+    throw err;
+  }
 }
 
 // ------------------------------------------------------------------ routes
@@ -304,7 +375,8 @@ export default [
       const units = await readCorpusUnits(params.p, body.corpusId);
       const est = await estimateInstrument(project, instrument, units);
       const capUSD = project.budget?.capUSD ?? null;
-      const spentUSD = project.budget?.spentUSD ?? 0;
+      const spentUSD = nonNegativeUSD(project.budget?.spentUSD);
+      const reservedUSD = nonNegativeUSD(project.budget?.reservedUSD);
       return {
         units: units.length,
         calls: est.calls,
@@ -317,7 +389,8 @@ export default [
         budget: {
           capUSD,
           spentUSD,
-          wouldExceed: capUSD !== null && spentUSD + est.estUSD >= capUSD,
+          reservedUSD,
+          wouldExceed: capUSD !== null && spentUSD + reservedUSD + est.estUSD >= capUSD,
         },
       };
     },
@@ -335,10 +408,11 @@ export default [
       // privacy: constructing the adapters is the gate (403 on strict violations)
       for (const j of jurorPayloadsOf(instrument)) getAdapter(project, j.provider);
 
-      // budget: spent + estimate against the project cap → 400 BUDGET_EXCEEDED
+      // Fast preflight for the UI; engine.createRun repeats this under the
+      // project lock and atomically records the reservation with the new run.
       const units = await readCorpusUnits(params.p, body.corpusId, body.unitFilter ? { filter: engineMod.parseUnitFilter(body.unitFilter) } : {});
       const est = await estimateInstrument(project, instrument, units);
-      checkBudget((project.budget?.spentUSD ?? 0) + est.estUSD, project.budget?.capUSD ?? null);
+      checkBudget(round6(nonNegativeUSD(project.budget?.spentUSD) + nonNegativeUSD(project.budget?.reservedUSD) + est.estUSD), project.budget?.capUSD ?? null);
 
       // Auto-name "<instrument> · <corpus display>" — a human-readable handle
       // for a run the researcher can later rename. The body may override it.
@@ -349,11 +423,16 @@ export default [
         ...(body.unitFilter !== undefined ? { unitFilter: body.unitFilter } : {}),
         ...(body.capUSD !== undefined ? { capUSD: body.capUSD } : {}),
         name: typeof body.name === "string" && body.name !== "" ? body.name : autoName,
-      });
-      await armDrift(project, instrument, run.id);
-      const escalate = project.director ? makeEscalator(project, construct) : undefined;
-      startExecution(params.p, run.id, { escalate });
-      return { runId: run.id, estUSD: run.cost.estUSD, total: run.checkpoint.total };
+      }, { reserveProjectBudget: true });
+      try {
+        await armDrift(project, instrument, run.id);
+        const escalate = project.director ? makeEscalator(project, construct) : undefined;
+        startExecution(params.p, run.id, { escalate });
+        return { runId: run.id, estUSD: run.cost.estUSD, total: run.checkpoint.total };
+      } catch (err) {
+        await releaseRunBudget(params.p, run.id).catch(() => {});
+        throw err;
+      }
     },
   },
   {
