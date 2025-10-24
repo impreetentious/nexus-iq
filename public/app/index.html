@@ -25,10 +25,12 @@
 <body>
   <a class="skip-link" href="#workspace">Skip to workspace</a>
 
-  <div class="app" id="app" data-inspector="closed">
+  <div class="app" id="app" data-inspector="closed" data-rail="open" data-viewport="desktop">
 
     <!-- ============ top bar ============ -->
     <header class="app-topbar">
+      <button id="rail-toggle" class="theme-toggle rail-toggle" type="button"
+        aria-controls="app-rail" aria-expanded="true" aria-label="Collapse navigation">☰</button>
       <a class="wordmark" href="#/" aria-label="Nexus IQ home">
         Nexus IQ<span class="wordmark__glyph" aria-hidden="true">◉</span>
       </a>
@@ -53,6 +55,10 @@
       <div class="topbar__cluster">
         <span id="privacy-chip" class="chip topbar__chip" hidden title="Privacy mode governs which model backends may see your data">—</span>
         <span id="cost-chip" class="chip topbar__chip data" title="Running model spend this session">$0.00</span>
+        <button id="ops-toggle" class="theme-toggle ops-toggle" type="button"
+          aria-expanded="false" aria-controls="opscenter" aria-label="Operation center">
+          ◈<span id="ops-badge" class="ops-badge" hidden>0</span>
+        </button>
         <span id="server-dot" class="status-dot" role="status" aria-label="Server status: checking"></span>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch theme">◐</button>
         <button id="inspector-toggle" class="theme-toggle" type="button" aria-label="Toggle evidence inspector" title="Evidence inspector">⌕</button>
@@ -60,13 +66,14 @@
     </header>
 
     <!-- ============ left rail ============ -->
-    <aside class="app-rail" aria-label="Project navigation">
+    <aside class="app-rail" id="app-rail" aria-label="Project navigation">
       <div id="rail-mount"></div>
       <div class="rail__footer">
         <span id="rail-status-dot" class="status-dot" aria-hidden="true"></span>
         <span id="rail-status">looking for the server…</span>
       </div>
     </aside>
+    <div id="rail-scrim" class="rail-scrim" hidden aria-hidden="true"></div>
 
     <!-- ============ center workspace ============ -->
     <main class="app-work" id="workspace-scroll">
@@ -75,6 +82,9 @@
 
     <!-- ============ right inspector ============ -->
     <aside class="app-inspector" id="inspector"></aside>
+
+    <!-- ============ operation center host ============ -->
+    <div id="opscenter-host" class="opscenter-host"></div>
 
   </div>
 

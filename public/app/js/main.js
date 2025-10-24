@@ -17,53 +17,71 @@ import * as glyph from "./components/glyph.js";
 import * as ladder from "./components/ladder.js";
 import * as pipeline from "./components/pipeline.js";
 import * as scopechip from "./components/scopechip.js";
+import * as opscenter from "./components/opscenter.js";
+import * as viewport from "./viewport.js";
+import * as jobs from "./jobs.js";
 import { fixturesEnabled, installFixtures } from "./fixtures.js";
-import { openSheet, estimateChips, refreshProject, runDisplayName, goldsetDisplayName, truncate } from "./screens/_shared.js";
+import { openSheet, estimateChips, refreshProject, runDisplayName, goldsetDisplayName, truncate, loadingView } from "./screens/_shared.js";
 
-// the product screens
+// Route-level module loading: only the home screen is eager. Every other
+// screen is a dynamic import() so a cold load no longer pays ~724 KB of
+// unused screen JS up front. See registerScreens() / SCREEN_LOADERS.
 import * as homeScreen from "./screens/home.js";
-import * as importScreen from "./screens/import.js";
-import * as instantreadScreen from "./screens/instantread.js";
-import * as briefScreen from "./screens/brief.js";
-import * as explorerScreen from "./screens/explorer.js";
-import * as constructsScreen from "./screens/constructs.js";
-import * as instrumentsScreen from "./screens/instruments.js";
-import * as calibrationScreen from "./screens/calibration.js";
-import * as runsScreen from "./screens/runs.js";
-import * as workbenchScreen from "./screens/workbench.js";
-import * as disagreementScreen from "./screens/disagreement.js";
-import * as reliabilityScreen from "./screens/reliability.js";
-import * as reportsScreen from "./screens/reports.js";
-import * as settingsScreen from "./screens/settings.js";
 
 const $ = (id) => document.getElementById(id);
 
-/* ---- screens registry --------------------------------------------------------- */
+/* ---- screens registry (lazy) ------------------------------------------------ */
 
-const SCREENS = [
-  homeScreen, importScreen, instantreadScreen, briefScreen, explorerScreen,
-  constructsScreen, instrumentsScreen, calibrationScreen, runsScreen,
-  workbenchScreen, disagreementScreen, reliabilityScreen, reportsScreen,
-  settingsScreen,
+const SCREEN_LOADERS = [
+  { routes: [""], title: "Projects", load: async () => homeScreen, eager: homeScreen },
+  { routes: ["p/:slug/import"], title: "Import", load: () => import("./screens/import.js") },
+  { routes: ["p/:slug/corpus/:cid/instant"], title: "Instant Read", load: () => import("./screens/instantread.js") },
+  { routes: ["p/:slug/brief/:bid"], title: "Brief", load: () => import("./screens/brief.js") },
+  { routes: ["p/:slug/explore/:runId"], title: "Explorer", load: () => import("./screens/explorer.js") },
+  { routes: ["p/:slug/constructs", "p/:slug/constructs/:id"], title: "Constructs", load: () => import("./screens/constructs.js") },
+  { routes: ["p/:slug/instruments", "p/:slug/instruments/:id"], title: "Instruments", load: () => import("./screens/instruments.js") },
+  { routes: ["p/:slug/goldsets/:gid"], title: "Calibration Studio", load: () => import("./screens/calibration.js") },
+  { routes: ["p/:slug/runs", "p/:slug/runs/:id"], title: "Runs", load: () => import("./screens/runs.js") },
+  { routes: ["p/:slug/analyses", "p/:slug/analyses/:id"], title: "Workbench", load: () => import("./screens/workbench.js") },
+  { routes: ["p/:slug/runs/:rid/disagreement"], title: "Disagreement", load: () => import("./screens/disagreement.js") },
+  { routes: ["p/:slug/reliability/:cid"], title: "Reliability", load: () => import("./screens/reliability.js") },
+  { routes: ["p/:slug/reports"], title: "Reports", load: () => import("./screens/reports.js") },
+  { routes: ["settings", "p/:slug/settings"], title: "Settings", load: () => import("./screens/settings.js") },
 ];
 
+const screenCache = new Map(); // loader fn → module
+
+async function loadScreen(entry) {
+  if (entry.eager) return entry.eager;
+  if (screenCache.has(entry.load)) return screenCache.get(entry.load);
+  const mod = await entry.load();
+  screenCache.set(entry.load, mod);
+  return mod;
+}
+
 function registerScreens() {
-  for (const screen of SCREENS) {
-    const patterns = screen.routes ?? [screen.route];
-    for (const pattern of patterns) {
-      routerMod.register(pattern, (mount, params, query) => screen.render(mount, params, query));
+  for (const entry of SCREEN_LOADERS) {
+    for (const pattern of entry.routes) {
+      if (pattern === "") {
+        // Home stays eager — no loading flash on first paint.
+        routerMod.register(pattern, (mount, params, query) => homeScreen.render(mount, params, query));
+        continue;
+      }
+      routerMod.register(pattern, async (mount, params, query) => {
+        clear(mount).append(loadingView("Loading screen…"));
+        const screen = await loadScreen(entry);
+        clear(mount);
+        return screen.render(mount, params, query);
+      });
     }
   }
-  // project landing redirect lives with home
+  // project landing redirect lives with home (eager)
   routerMod.register("p/:slug", (mount, params) => homeScreen.renderProject(mount, params));
 
   // Document titles follow the screen. When framed by the Next shell, report
   // the same route/title upward so a copied top-level URL restores this view.
   bus.on("route:changed", ({ path }) => {
-    const match = SCREENS.find((s) => {
-      const pats = s.routes ?? [s.route];
-      return pats.some((p) => patternMatches(p, path));
-    });
+    const match = SCREEN_LOADERS.find((s) => s.routes.some((p) => patternMatches(p, path)));
     document.title = match ? `${match.title} — Nexus IQ` : "Nexus IQ";
     reportFrameRoute();
   });
@@ -601,6 +619,8 @@ function initInspector() {
 async function boot() {
   initTheme();
   toast.init();
+  viewport.init({ app: $("app") });
+  opscenter.init({ mount: $("opscenter-host") });
 
   if (fixturesEnabled()) {
     try {
@@ -639,4 +659,4 @@ if (document.readyState === "loading") {
 }
 
 // surfaced for screens and the console
-window.nexusIQ = { api, store, bus, router: routerMod, inspector, toast };
+window.nexusIQ = { api, store, bus, router: routerMod, inspector, toast, jobs, viewport };

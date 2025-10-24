@@ -173,6 +173,13 @@ kbd {
   grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--inspector-w);
 }
 
+.app[data-rail="collapsed"] {
+  grid-template-columns: 0px minmax(0, 1fr) 0px;
+}
+.app[data-rail="collapsed"][data-inspector="open"] {
+  grid-template-columns: 0px minmax(0, 1fr) var(--inspector-w);
+}
+
 /* full-bleed reading/coding: the chrome recedes, the text owns the page */
 .app[data-fullbleed] {
   grid-template-columns: 0px minmax(0, 1fr) 0px;
@@ -216,6 +223,75 @@ kbd {
   overflow: hidden;
   border-left: var(--rule);
   background: var(--paper-raised);
+}
+
+/* ---- responsive shell (docs/viewport-policy.md) ---------------------------
+   Desktop ≥1100: rail inline, inspector docks.
+   Tablet/narrow <1100: rail + inspector are overlays; grid is work-only. */
+
+.rail-toggle { display: none; }
+.rail-scrim {
+  display: none;
+  position: fixed;
+  inset: var(--topbar-h) 0 0 0;
+  background: var(--ground-veil);
+  z-index: calc(var(--z-rail) - 1);
+}
+.opscenter-host {
+  position: fixed;
+  inset: auto var(--s4) var(--s4) auto;
+  z-index: calc(var(--z-toast) + 1);
+  max-width: min(24rem, calc(100vw - 2rem));
+}
+
+@media (max-width: 1099px) {
+  .rail-toggle { display: inline-flex; }
+  .app,
+  .app[data-inspector="open"],
+  .app[data-rail="collapsed"],
+  .app[data-rail="collapsed"][data-inspector="open"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "topbar"
+      "work";
+  }
+  .app-rail {
+    position: fixed;
+    top: var(--topbar-h);
+    left: 0;
+    bottom: 0;
+    width: min(var(--rail-w), 88vw);
+    transform: translateX(-105%);
+    transition: transform var(--t-med) var(--ease);
+    box-shadow: var(--shadow-lift);
+    z-index: calc(var(--z-rail) + 5);
+  }
+  .app[data-rail="open"] .app-rail { transform: translateX(0); }
+  .rail-scrim:not([hidden]) { display: block; }
+
+  .app-inspector {
+    position: fixed;
+    top: var(--topbar-h);
+    right: 0;
+    bottom: 0;
+    width: min(var(--inspector-w), 92vw);
+    transform: translateX(105%);
+    transition: transform var(--t-med) var(--ease);
+    box-shadow: var(--shadow-lift);
+    border-left: var(--rule);
+    z-index: calc(var(--z-inspector) + 5);
+  }
+  .app[data-inspector="open"] .app-inspector { transform: translateX(0); }
+
+  .qbar__key { display: none; }
+  .topbar__chip { max-width: 6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+@media (max-width: 767px) {
+  .app-topbar { gap: var(--s2); padding: 0 var(--s2); }
+  .wordmark { font-size: 0.95rem; }
+  .qbar { min-width: 0; flex: 1; }
+  .work-page { padding: var(--s4) var(--s3) var(--s6); }
 }
 
 /* workspace inner measure for screen content */

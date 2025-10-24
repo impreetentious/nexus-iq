@@ -86,10 +86,13 @@ export const store = createStore({
     theme: "auto",      // "auto" | "light" | "dark"
     inspectorOpen: false,
     fullbleed: false,
+    railOpen: null,     // null = follow viewport default; bool = explicit
+    viewport: "desktop", // desktop | tablet | narrow — docs/viewport-policy.md
     route: null,
     serverOk: null,     // null = unknown, true/false after health ping
     costUSD: 0,         // running session cost (chip in the top bar)
     privacyMode: null,  // mirrors project.privacyMode for the chip
+    jobs: [],           // operation-center snapshot (jobs.js)
   },
 });
 
