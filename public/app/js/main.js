@@ -57,14 +57,32 @@ function registerScreens() {
   // project landing redirect lives with home
   routerMod.register("p/:slug", (mount, params) => homeScreen.renderProject(mount, params));
 
-  // document titles follow the screen
+  // Document titles follow the screen. When framed by the Next shell, report
+  // the same route/title upward so a copied top-level URL restores this view.
   bus.on("route:changed", ({ path }) => {
     const match = SCREENS.find((s) => {
       const pats = s.routes ?? [s.route];
       return pats.some((p) => patternMatches(p, path));
     });
     document.title = match ? `${match.title} — Nexus IQ` : "Nexus IQ";
+    reportFrameRoute();
   });
+  // The parent sends this once its message listener is installed. It closes
+  // the otherwise-racy first-load window where this app finishes rendering
+  // before the iframe host can hear its initial route/title event.
+  window.addEventListener("message", (event) => {
+    if (event.origin !== window.location.origin || event.source !== window.parent) return;
+    if (event.data?.type === "nexus-iq:request-route") reportFrameRoute();
+  });
+}
+
+function reportFrameRoute() {
+  if (window.parent === window) return;
+  window.parent.postMessage({
+    type: "nexus-iq:route",
+    hash: location.hash || "#/",
+    title: document.title || "Nexus IQ",
+  }, window.location.origin);
 }
 
 function patternMatches(pattern, path) {

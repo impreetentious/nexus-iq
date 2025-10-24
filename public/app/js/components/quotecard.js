@@ -47,7 +47,14 @@ export function render({
 
   return el("figure", {
     class: `quote${compact ? " quote--compact" : ""}`,
-    dataset: evidence && unit.id ? { evidence: unit.id } : {},
+    ...(evidence && unit.id
+      ? {
+          dataset: { evidence: unit.id },
+          tabindex: "0",
+          role: "button",
+          aria: { label: `Open evidence for ${unit.id}` },
+        }
+      : {}),
   }, body, source);
 }
 

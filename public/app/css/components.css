@@ -1013,6 +1013,11 @@ text.chart__delta { font-size: 11px; font-weight: 500; fill: var(--signal-text);
 
 .chart__row.evidence-door:hover rect { filter: brightness(1.12); }
 
+/* A few evidence doors are semantic figures/SVG groups rather than native
+   buttons. They receive the same explicit focus cue as button doors. */
+[data-evidence][role="button"] { cursor: pointer; }
+[data-evidence][role="button"]:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
 .chart__line { stroke: var(--machine); stroke-width: 1.8; }
 .chart__series--emphasis .chart__line { stroke: var(--ink); stroke-width: 2.2; }
 .chart__dot { fill: var(--machine); }
