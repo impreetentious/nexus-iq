@@ -2,7 +2,7 @@
 
 Nexus IQ is a local-first qualitative text measurement platform. It combines a Next.js shell with a Node backend so teams can move from exploratory reading to calibrated, evidence-linked analysis without depending on a hosted service by default.
 
-**Release version:** `v2.5.3`
+**Release version:** `v2.5.4`
 
 The product is built around two modes of work:
 
@@ -89,6 +89,10 @@ docker compose up --build
 Then open `http://localhost:3000`. The image includes `demo/` for the documented walkthrough. The Compose file mounts named volumes for `projects/` and `config/`, so project bundles, saved provider keys, and settings survive `docker compose down` and container rebuilds. Only port 3000 is published — the backend binds `127.0.0.1` inside the container and the Next.js shell proxies `/api` to it. To start clean, remove the volumes with `docker compose down -v`.
 
 ## Changelog
+
+### v2.5.4
+
+- Catalog pricing freshness stamps: pricingVerifiedAt on static provider rows, mergeCatalogPricing propagation, and freshness envelope on GET /api/catalog/models.
 
 ### v2.5.3
 

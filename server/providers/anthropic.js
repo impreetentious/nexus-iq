@@ -13,10 +13,17 @@ const CATALOG_PAGE_CAP = 20; // /v1/models pages are ≤1000 ids; this is a runa
 // 2025-09 (Claude 3 Opus $15/$75 · 200K ctx; Claude 3.5 Sonnet $3/$15 · 200K ctx; Claude 3.5 Haiku
 // $1/$5 · 200K ctx). Re-check on the next model launch — stale numbers here
 // feed BOTH preflight estimates and the live budget meter.
+//
+// `pricingVerifiedAt` is the ISO date of the last human check against the
+// provider's public price sheet. It rides the merged catalog entry to the
+// UI so a wizard can flag anything older than the staleness budget (see
+// routes/catalog.js `freshness.staleAfterDays`). Bump the date whenever
+// you re-verify these numbers.
+const PRICING_VERIFIED_AT = "2025-09-13";
 const STATIC_CATALOG = [
-  { id: "claude-3-opus", name: "Claude 3 Opus", family: "anthropic", ctx: 200_000, pricing: { inUSDper1M: 15, outUSDper1M: 75 }, snapshot: "claude-3-opus", estimate: true },
-  { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", family: "anthropic", ctx: 200_000, pricing: { inUSDper1M: 3, outUSDper1M: 15 }, snapshot: "claude-3-5-sonnet", estimate: true },
-  { id: "claude-3-5-haiku", name: "Claude 3.5 Haiku", family: "anthropic", ctx: 200_000, pricing: { inUSDper1M: 1, outUSDper1M: 5 }, snapshot: "claude-3-5-haiku", estimate: true },
+  { id: "claude-3-opus", name: "Claude 3 Opus", family: "anthropic", ctx: 200_000, pricing: { inUSDper1M: 15, outUSDper1M: 75 }, snapshot: "claude-3-opus", estimate: true, pricingVerifiedAt: PRICING_VERIFIED_AT },
+  { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", family: "anthropic", ctx: 200_000, pricing: { inUSDper1M: 3, outUSDper1M: 15 }, snapshot: "claude-3-5-sonnet", estimate: true, pricingVerifiedAt: PRICING_VERIFIED_AT },
+  { id: "claude-3-5-haiku", name: "Claude 3.5 Haiku", family: "anthropic", ctx: 200_000, pricing: { inUSDper1M: 1, outUSDper1M: 5 }, snapshot: "claude-3-5-haiku", estimate: true, pricingVerifiedAt: PRICING_VERIFIED_AT },
 ];
 
 export class AnthropicAdapter extends Adapter {

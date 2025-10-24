@@ -134,6 +134,13 @@ export function malformedResponse(provider, raw) {
 // and `snapshot` are NOT inherited — family stays the live family, and the
 // snapshot is the live id itself.
 //
+// `pricingVerifiedAt` (ISO date on the matched static entry) rides through
+// onto the merged result so callers can flag stale-price adapters — a live
+// live id that inherited "claude-3-opus"'s row inherits its verified date
+// too. Unmatched entries have no verified date to carry, so the field is
+// simply absent (the freshness envelope's staleAfterDays still applies to
+// the whole catalog snapshot).
+//
 // live: {id, name, family} plus any capability fields the caller attached.
 // statics: the adapter's STATIC_CATALOG array.
 export function mergeCatalogPricing(live, statics) {
@@ -150,6 +157,7 @@ export function mergeCatalogPricing(live, statics) {
       pricing: { ...best.pricing },
       snapshot: live.snapshot ?? live.id,
       estimate: true, // static pricing is itself an estimate
+      ...(best.pricingVerifiedAt ? { pricingVerifiedAt: best.pricingVerifiedAt } : {}),
     };
   }
   return {

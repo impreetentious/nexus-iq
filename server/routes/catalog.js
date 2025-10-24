@@ -10,6 +10,15 @@ const CATALOG_TTL_MS = 60 * 60 * 1000; // 1 hour
 const HEALTH_TTL_MS = 30 * 1000;
 const CATALOG_TIMEOUT_MS = 1500; // network catalogs must not wedge the UI
 
+// Freshness policy. Static estimates ride on top of live catalog ids, and
+// the accepted design is "estimate: true is fine; stale numbers are not":
+// a wizard/warn UI flags any pricingVerifiedAt older than STALE_AFTER_DAYS
+// so the researcher knows to re-check the provider's public price sheet.
+// The window matches the cadence at which providers meaningfully change
+// list pricing (per model launch, ~quarterly). One knob for the whole app.
+const STALE_AFTER_DAYS = 90;
+const FRESHNESS_POLICY = "estimate-ok-stale-not";
+
 let catalogCache = null; // {at, data}
 let healthCache = null; // {at, data}
 
@@ -36,6 +45,9 @@ async function buildCatalog({ force = false } = {}) {
       // adapters that compute their own per-model flags (openrouter, from
       // supported_parameters) pass through untouched; static catalogs are
       // decorated from capabilities(). params null = no per-model list exists.
+      // pricingVerifiedAt (set by mergeCatalogPricing off the static table)
+      // rides through here — spreading the model entry LAST keeps the field
+      // present on every model the static table priced.
       providers[name] = models.map((m) => ({
         structuredOutput: caps.structuredOutput ?? false,
         noTemperature: false,
@@ -46,7 +58,19 @@ async function buildCatalog({ force = false } = {}) {
       providers[name] = []; // unreachable/keyless catalog → empty, never an error
     }
   }
-  return { providers, cachedAt: new Date().toISOString() };
+  const cachedAt = new Date().toISOString();
+  return {
+    providers,
+    cachedAt,
+    // Duplicated at the top level so a wizard can render one policy banner
+    // per catalog snapshot without walking every provider.
+    staleAfterDays: STALE_AFTER_DAYS,
+    freshness: {
+      cachedAt,
+      staleAfterDays: STALE_AFTER_DAYS,
+      policy: FRESHNESS_POLICY,
+    },
+  };
 }
 
 // Used by /api/health in server/index.js: configured keys present / ollama
