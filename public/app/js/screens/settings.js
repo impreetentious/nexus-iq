@@ -10,7 +10,7 @@ import * as toast from "../components/toast.js";
 import * as modelpicker from "../components/modelpicker.js";
 import { store } from "../state.js";
 import { fmtCost } from "../format.js";
-import { screenHead, section, asyncMount, ensureProject, openSheet, emptyState } from "./_shared.js";
+import { screenHead, section, asyncMount, ensureProject, openSheet, emptyState, buttonBusy } from "./_shared.js";
 
 export const route = "settings";
 export const routes = ["settings", "p/:slug/settings"];
@@ -49,17 +49,24 @@ export function render(mount, params) {
   const projectScoped = Boolean(params.slug);
   asyncMount(mount, async () => {
     const project = projectScoped ? await ensureProject(params.slug) : null;
-    const [settings, catalogRes, health] = await Promise.all([
+    const [settings, catalogRes, health, diag] = await Promise.all([
       api.settings.get().catch(() => null),          // live: {keys, port}
-      api.catalog.models().catch(() => ({ providers: {} })), // live: {providers, cachedAt}
+      api.catalog.models().catch(() => ({ providers: {} })), // live: {providers, cachedAt, freshness}
       api.health().catch(() => null),                // live: {ok, version, providers: {name: bool}}
+      api.diagnostics.system().catch(() => null),
     ]);
-    return { project, settings, catalog: catalogRes?.providers ?? {}, health };
-  }, ({ project, settings, catalog, health }) => {
+    return { project, settings, catalogRes, catalog: catalogRes?.providers ?? {}, health, diag };
+  }, ({ project, settings, catalogRes, catalog, health, diag }) => {
     mount.append(screenHead({
       overline: projectScoped ? `Settings · ${project?.name ?? params.slug}` : "Settings",
       title: projectScoped ? "This project's rules." : "Nexus IQ's defaults.",
       lede: "Keys live in config/, outside every project bundle and every archive. Privacy is enforced at the adapter, not promised by the UI.",
+      actions: [
+        el("button", {
+          class: "btn btn--quiet", type: "button",
+          onclick: () => openProviderWizard({ settings, health, catalog, catalogRes, project, slug: params.slug }),
+        }, "Provider setup wizard"),
+      ],
     }));
 
     if (!settings) {
@@ -82,31 +89,18 @@ export function render(mount, params) {
     }
     mount.append(section("Providers", provGrid));
 
-    /* ---- model catalog ---- */
-    const catRows = Object.entries(catalog ?? {}).flatMap(([provider, models]) =>
-      (models ?? []).map((m) => ({ provider, ...m })));
+    /* ---- model catalog + freshness stamps ---- */
+    const freshness = catalogRes?.freshness ?? {
+      cachedAt: catalogRes?.cachedAt,
+      staleAfterDays: catalogRes?.staleAfterDays ?? 90,
+      policy: "estimate-ok-stale-not",
+    };
     mount.append(section("Model catalog",
-      el("div", { class: "tablewrap" },
-        el("table", { class: "table" },
-          el("caption", { class: "sr-only" }, "Model catalog"),
-          el("thead", {}, el("tr", {},
-            el("th", { scope: "col" }, "provider"), el("th", { scope: "col" }, "model"),
-            el("th", { scope: "col" }, "family"), el("th", { scope: "col", class: "table__num data" }, "ctx"),
-            el("th", { scope: "col", class: "table__num data" }, "$/1M in"), el("th", { scope: "col", class: "table__num data" }, "$/1M out"),
-            el("th", { scope: "col" }, "supports"),
-            el("th", { scope: "col" }, "snapshot"))),
-          el("tbody", {},
-            ...catRows.map((m) => el("tr", {},
-              el("td", {}, m.provider),
-              el("td", {}, m.name ?? m.id, m.local ? el("span", { class: "chip chip--ghost" }, "local") : null),
-              el("td", {}, el("span", { class: "chip" }, m.family)),
-              el("td", { class: "table__num data" }, String(m.ctx ?? "—")),
-              el("td", { class: "table__num data" }, String(m.pricing?.inUSDper1M ?? 0)),
-              el("td", { class: "table__num data" }, String(m.pricing?.outUSDper1M ?? 0)),
-              el("td", {}, (() => { const b = modelpicker.capBadges(m); return b.length ? b : "—"; })()),
-              el("td", { class: "data settings__snapshot" }, m.snapshot ?? "—")))))),
+      freshnessBanner(freshness, catalog),
+      catalogTable(catalog),
       el("p", { class: "screen__hint faint" },
-        "Parameter support varies by model; unsupported settings may be ignored or rejected by the provider — a rejected call pauses the run with the provider's error.")));
+        "Estimates are fine (", el("code", {}, "estimate: true"),
+        "); stale verified dates are not. Parameter support varies by model — a rejected call pauses the run with the provider's error.")));
 
     /* ---- Director slot — a PROJECT field, saved via PUT /api/settings
        {project: {slug, director}} (no global Director exists) ---- */
@@ -186,6 +180,42 @@ export function render(mount, params) {
               toast.info(`Theme: ${t}.`, { duration: 1500 });
             },
           }, t)))));
+
+    /* ---- diagnostics / support bundle ---- */
+    mount.append(section("Diagnostics & backup",
+      el("div", { class: "diag-panel" },
+        el("p", { class: "screen__hint" },
+          "Support bundles are diagnostic snapshots — keys and PII vaults are never included. ",
+          "They are ", el("strong", {}, "not"), " restore archives. See ",
+          el("code", {}, "docs/support-bundle.md"), " and ",
+          el("code", {}, "docs/backup-restore.md"), "."),
+        diag
+          ? el("p", { class: "data faint" },
+              `v${diag.version} · ${diag.node} · ${diag.platform} · bundleFormat ${diag.bundleFormat} · ${diag.projectsCount} projects`)
+          : el("p", { class: "faint" }, "System diagnostics unavailable."),
+        el("div", { class: "diag-actions" },
+          projectScoped
+            ? el("button", {
+                class: "btn", type: "button",
+                onclick: () => {
+                  api.diagnostics.downloadSupportBundle(params.slug);
+                  toast.info("Downloading support bundle…", { detail: "keys and vaults excluded" });
+                },
+              }, "Download support bundle")
+            : el("p", { class: "faint" }, "Open a project’s settings to download its support bundle."),
+          el("button", {
+            class: "btn btn--quiet", type: "button",
+            onclick: async () => {
+              try {
+                const d = await api.diagnostics.system();
+                toast.success("Diagnostics refreshed.", {
+                  detail: `v${d.version} · ${d.projectsCount} projects · format ${d.bundleFormat}`,
+                });
+              } catch (err) {
+                toast.error("Diagnostics failed.", { detail: String(err.message ?? err) });
+              }
+            },
+          }, "Refresh system diagnostics")))));
 
     /* ---- danger zone ---- */
     mount.append(section("Danger zone",

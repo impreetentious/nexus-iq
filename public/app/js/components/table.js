@@ -26,6 +26,7 @@ export function render({
   sort = null,
   empty = {},
   dense = false,
+  cards = true,
 } = {}) {
   let state = { rows: [...rows], sort: sort ? { ...sort } : null };
 
@@ -101,6 +102,16 @@ export function render({
       }
       tbody.append(tr);
     }
+    stampLabels();
+  }
+
+  function stampLabels() {
+    for (const tr of tbody.querySelectorAll("tr")) {
+      tr.querySelectorAll("td").forEach((td, i) => {
+        const col = columns[i];
+        if (col?.label) td.setAttribute("data-label", col.label);
+      });
+    }
   }
 
   function sortBy(key, dir = "asc") {
@@ -121,6 +132,9 @@ export function render({
   renderBody();
 
   wrap.append(table);
+  // Narrow layouts: stack rows as labeled cards when `cards` is true
+  // (default on) — see docs/viewport-policy.md and .tablewrap--cards CSS.
+  if (cards !== false) wrap.classList.add("tablewrap--cards");
   wrap.update = ({ rows: nextRows }) => {
     state.rows = [...(nextRows ?? [])];
     if (state.sort) sortBy(state.sort.key, state.sort.dir);
