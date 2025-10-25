@@ -8,8 +8,8 @@
 //   2. [bug 2 — brief] generateBrief honors an AbortSignal: a client that
 //      disconnects before the one paid Director call spends nothing (the
 //      cooperative check fires BEFORE callDirector). Silver-tune's signal is
-//      deferred (its loop lives in server/director/silver.js, a non-owned
-//      file) — see the suite footer note.
+//      now wired too (a between-iteration check in silverTune's loop, its
+//      route opening an AbortController on disconnect) — see the suite footer.
 //   3. [bug 3] a coder listener that dies marks its session dead and fires the
 //      onDead eviction hook, so the session registry never hands back a dead
 //      url.
@@ -362,9 +362,10 @@ test("bug5: two instruments differing ONLY in silver.iterations produce differen
 });
 
 // -------------------------------------------------------------------------
-// DEFERRED (reported, not implemented here): bug 2 for POST /silver-tune. The
-// abort must be honored by a between-iteration check INSIDE silverTune, whose
-// loop lives in server/director/silver.js — a file this task does not own.
-// The owned route (server/routes/instruments.js) can open the AbortController,
-// but wiring a signal that silverTune ignores would be dead code, so it is
-// left for the silver.js owner. The brief path (above) is implemented in full.
+// bug 2 for POST /silver-tune — IMPLEMENTED. The abort is now honored by a
+// between-iteration check inside silverTune (server/director/silver.js: the
+// `if (signal?.aborted) { stoppedBy = "aborted"; break; }` guard before the
+// next iteration's paid worker+Director calls), and the owned route wires it
+// (server/routes/instruments.js: an AbortController aborted on connection
+// close, its signal threaded into silverTune). Both the brief path (above)
+// and the silver-tune path now cooperatively stop on disconnect.
