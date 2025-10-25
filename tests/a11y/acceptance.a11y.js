@@ -22,6 +22,19 @@ async function openApp(page, hash = "#/?fixtures=1") {
 }
 
 async function axeScan(page, name) {
+  // Toasts and rail/inspector panels enter via opacity/transform transitions.
+  // axe computes contrast on the *composited* pixel, so an element caught
+  // mid-fade reports a color blended toward the page — a transient false
+  // positive (settled contrast is fine: --ink 16.6:1, --ink-faint 4.91:1).
+  // Let in-flight animations/transitions finish first, bounded so an infinite
+  // (looping) animation can never hang the scan.
+  await page.evaluate(async () => {
+    const running = document.getAnimations().filter((a) => a.playState === "running");
+    await Promise.race([
+      Promise.all(running.map((a) => a.finished.catch(() => {}))),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]);
+  });
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa"])
     .analyze();

@@ -21,10 +21,10 @@ if (lock.packages?.[""]?.version && lock.packages[""].version !== version) {
   errors.push(`package-lock packages[""].version ${lock.packages[""].version} ≠ ${version}`);
 }
 
-const m = readme.match(/\*\*Release version:\*\*\s*`v?([^`]+)`/);
-if (!m) errors.push("README.md missing **Release version:** `vX.Y.Z` marker");
+const m = readme.match(/\*\*(?:Release version|Version):\*\*\s*`?v?([0-9][^`\s]*)`?/);
+if (!m) errors.push("README.md missing **Version:** vX.Y.Z marker");
 else if (m[1] !== version) {
-  errors.push(`README.md Release version v${m[1]} ≠ package.json ${version}`);
+  errors.push(`README.md Version v${m[1]} ≠ package.json ${version}`);
 }
 
 // SheetJS must resolve from the vendored tarball (supply-chain).
