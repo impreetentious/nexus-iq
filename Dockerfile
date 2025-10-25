@@ -2,6 +2,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
+COPY vendor ./vendor
 RUN npm ci
 COPY . .
 RUN npm run build
@@ -10,6 +11,7 @@ FROM node:20-alpine
 WORKDIR /app
 RUN chown node:node /app
 COPY --from=builder --chown=node:node /app/package*.json ./
+COPY --from=builder --chown=node:node /app/vendor ./vendor
 COPY --from=builder --chown=node:node /app/next.config.js ./next.config.js
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/.next ./.next

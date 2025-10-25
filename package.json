@@ -1,6 +1,6 @@
 {
   "name": "nexus-iq",
-  "version": "2.5.6",
+  "version": "2.5.7",
   "description": "Local-first qualitative text measurement platform.",
   "type": "module",
   "license": "MIT",
@@ -18,7 +18,9 @@
     "start": "concurrently \"npm run next:start\" \"npm run server\"",
     "start:docker": "concurrently \"next start -H 0.0.0.0\" \"npm run server\"",
     "test": "node --test tests/unit/*.test.js tests/server/*.test.js tests/e2e/*.test.js tests/integration/*.test.js tests/sim/*.test.js",
-    "test:a11y": "playwright test -c playwright.config.mjs"
+    "test:a11y": "playwright test -c playwright.config.mjs",
+    "check:version": "node scripts/check-version-coherence.mjs",
+    "docker:smoke": "node scripts/docker-smoke.mjs"
   },
   "dependencies": {
     "busboy": "^1.6.0",
@@ -29,7 +31,11 @@
     "pdfjs-dist": "^4.10.38",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "xlsx": "file:./vendor/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.1",
+    "@playwright/test": "^1.52.0"
   },
   "overrides": {
     "postcss": "^8.5.6"
@@ -42,9 +48,5 @@
   "bugs": {
     "url": "https://github.com/ItsMonarch04/nexus-iq/issues"
   },
-  "homepage": "https://github.com/ItsMonarch04/nexus-iq#",
-  "devDependencies": {
-    "@axe-core/playwright": "^4.10.1",
-    "@playwright/test": "^1.52.0"
-  }
+  "homepage": "https://github.com/ItsMonarch04/nexus-iq#"
 }
