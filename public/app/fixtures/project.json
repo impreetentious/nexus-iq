@@ -5,7 +5,11 @@
   "createdAt": "2026-06-01T09:14:00Z",
   "privacyMode": "no-training",
   "budget": { "capUSD": 25, "spentUSD": 4.87 },
-  "director": { "provider": "anthropic", "model": "claude-3-sonnet", "snapshot": "claude-3-sonnet-20240229" },
+  "director": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-5",
+    "snapshot": "claude-sonnet-4-5-20250929"
+  },
   "corpora": [
     {
       "id": "corp_exit2025",
@@ -36,13 +40,35 @@
     }
   ],
   "analyses": [
-    { "id": "an_crosstab", "kind": "crosstab", "level": "corrected", "createdAt": "2026-06-04T16:40:00Z" },
-    { "id": "an_triang", "kind": "triangulation", "level": "exploratory", "createdAt": "2026-06-04T17:02:00Z" },
-    { "id": "an_subgroup", "kind": "subgroup", "level": "corrected", "createdAt": "2026-06-04T17:15:00Z" },
+    {
+      "id": "an_crosstab",
+      "kind": "crosstab",
+      "level": "corrected",
+      "createdAt": "2026-06-04T16:40:00Z"
+    },
+    {
+      "id": "an_triang",
+      "kind": "triangulation",
+      "level": "exploratory",
+      "createdAt": "2026-06-04T17:02:00Z"
+    },
+    {
+      "id": "an_subgroup",
+      "kind": "subgroup",
+      "level": "corrected",
+      "createdAt": "2026-06-04T17:15:00Z"
+    },
     { "id": "an_model", "kind": "model", "level": "corrected", "createdAt": "2026-06-04T18:03:00Z" }
   ],
   "briefs": [
-    { "id": "brief_a1", "corpusId": "corp_exit2025", "createdAt": "2026-06-01T09:32:00Z", "authoredBy": "director", "paragraphs": 5, "themes": 5 }
+    {
+      "id": "brief_a1",
+      "corpusId": "corp_exit2025",
+      "createdAt": "2026-06-01T09:32:00Z",
+      "authoredBy": "director",
+      "paragraphs": 5,
+      "themes": 5
+    }
   ],
   "plans": []
 }

@@ -8,13 +8,21 @@
       "status": "complete",
       "checkpoint": { "done": 2500, "total": 2500 },
       "cost": { "estUSD": 4.1, "actualUSD": 3.86, "inputTokens": 4012400, "outputTokens": 612800 },
-      "escalation": { "count": 37, "directorModel": "claude-3-sonnet" },
+      "escalation": { "count": 37, "directorModel": "claude-sonnet-4-5" },
       "quarantine": [
-        { "unitId": "u_84d5f1b7e0c3a926", "code": "SCHEMA_INVALID", "message": "juror qwen2.5:7b-instruct answered prose instead of the label schema after 2 constrained repairs" },
-        { "unitId": "u_d12f4a86c3e09b58", "code": "TRUNCATED", "message": "structured output truncated at the token limit; raise maxTokens (currently 400)" }
+        {
+          "unitId": "u_84d5f1b7e0c3a926",
+          "code": "SCHEMA_INVALID",
+          "message": "juror qwen2.5:7b-instruct answered prose instead of the label schema after 2 constrained repairs"
+        },
+        {
+          "unitId": "u_d12f4a86c3e09b58",
+          "code": "TRUNCATED",
+          "message": "structured output truncated at the token limit; raise maxTokens (currently 400)"
+        }
       ],
       "provider": "anthropic+openai+ollama",
-      "model": "claude-3-5-haiku+gpt-5-mini+qwen2.5:7b-instruct",
+      "model": "claude-haiku-4-5+gpt-5-mini+qwen2.5:7b-instruct",
       "snapshot": null,
       "pinned": true,
       "capUSD": null,
@@ -30,11 +38,11 @@
       "status": "pending",
       "checkpoint": { "done": 0, "total": 2500 },
       "cost": { "estUSD": 1.42, "actualUSD": 0, "inputTokens": 0, "outputTokens": 0 },
-      "escalation": { "count": 0, "directorModel": "claude-3-sonnet" },
+      "escalation": { "count": 0, "directorModel": "claude-sonnet-4-5" },
       "quarantine": [],
       "provider": "anthropic",
-      "model": "claude-3-5-haiku",
-      "snapshot": "claude-3-5-haiku-20241022",
+      "model": "claude-haiku-4-5",
+      "snapshot": "claude-haiku-4-5-20251001",
       "pinned": true,
       "capUSD": null,
       "createdAt": "2026-06-04T11:50:00Z",
@@ -44,28 +52,53 @@
   ],
   "preflight": {
     "inst_judge_s": {
-      "units": 2500, "calls": 2500, "inputTokens": 1956000, "outputTokens": 290000,
-      "estUSD": 1.42, "etaMin": 38, "privacyOk": true,
+      "units": 2500,
+      "calls": 2500,
+      "inputTokens": 1956000,
+      "outputTokens": 290000,
+      "estUSD": 1.42,
+      "etaMin": 38,
+      "privacyOk": true,
       "budget": { "capUSD": 25, "spentUSD": 4.87, "wouldExceed": false }
     },
     "inst_panel": {
-      "units": 2500, "calls": 7500, "inputTokens": 5868000, "outputTokens": 870000,
-      "estUSD": 4.1, "etaMin": 74, "privacyOk": true,
+      "units": 2500,
+      "calls": 7500,
+      "inputTokens": 5868000,
+      "outputTokens": 870000,
+      "estUSD": 4.1,
+      "etaMin": 74,
+      "privacyOk": true,
       "budget": { "capUSD": 25, "spentUSD": 4.87, "wouldExceed": false }
     },
     "inst_judge_f": {
-      "units": 2500, "calls": 2500, "inputTokens": 2010000, "outputTokens": 300000,
-      "estUSD": 1.48, "etaMin": 39, "privacyOk": true,
+      "units": 2500,
+      "calls": 2500,
+      "inputTokens": 2010000,
+      "outputTokens": 300000,
+      "estUSD": 1.48,
+      "etaMin": 39,
+      "privacyOk": true,
       "budget": { "capUSD": 25, "spentUSD": 4.87, "wouldExceed": false }
     },
     "inst_judge_x": {
-      "units": 2500, "calls": 2500, "inputTokens": 1890000, "outputTokens": 285000,
-      "estUSD": 1.39, "etaMin": 38, "privacyOk": true,
+      "units": 2500,
+      "calls": 2500,
+      "inputTokens": 1890000,
+      "outputTokens": 285000,
+      "estUSD": 1.39,
+      "etaMin": 38,
+      "privacyOk": true,
       "budget": { "capUSD": 25, "spentUSD": 4.87, "wouldExceed": false }
     },
     "inst_dict": {
-      "units": 2500, "calls": 2500, "inputTokens": 0, "outputTokens": 0,
-      "estUSD": 0, "etaMin": 0, "privacyOk": true,
+      "units": 2500,
+      "calls": 2500,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "estUSD": 0,
+      "etaMin": 0,
+      "privacyOk": true,
       "budget": { "capUSD": 25, "spentUSD": 4.87, "wouldExceed": false }
     }
   },
@@ -74,16 +107,173 @@
   "monitorScript": {
     "note": "fixtures replay of the live monitor tick shape {done, total, costUSD, labelDist, warnings: [{kind, message}], escalations}",
     "ticks": [
-      { "done": 122, "total": 2500, "costUSD": 0.07, "labelDist": { "pay": 38, "management": 25, "workload-burnout": 31, "growth": 14, "remote-policy": 8, "other": 6 }, "warnings": [], "escalations": 1 },
-      { "done": 304, "total": 2500, "costUSD": 0.18, "labelDist": { "pay": 92, "management": 64, "workload-burnout": 79, "growth": 38, "remote-policy": 19, "other": 12 }, "warnings": [], "escalations": 3 },
-      { "done": 511, "total": 2500, "costUSD": 0.3, "labelDist": { "pay": 151, "management": 109, "workload-burnout": 131, "growth": 67, "remote-policy": 34, "other": 19 }, "warnings": [], "escalations": 5 },
-      { "done": 745, "total": 2500, "costUSD": 0.44, "labelDist": { "pay": 218, "management": 158, "workload-burnout": 192, "growth": 99, "remote-policy": 49, "other": 29 }, "warnings": [{ "kind": "quarantine", "message": "unit u_84d5f1b7e0c3a926 quarantined: SCHEMA_INVALID", "unitId": "u_84d5f1b7e0c3a926" }], "escalations": 9 },
-      { "done": 1002, "total": 2500, "costUSD": 0.59, "labelDist": { "pay": 290, "management": 214, "workload-burnout": 259, "growth": 134, "remote-policy": 66, "other": 39 }, "warnings": [], "escalations": 12 },
-      { "done": 1290, "total": 2500, "costUSD": 0.76, "labelDist": { "pay": 372, "management": 277, "workload-burnout": 332, "growth": 173, "remote-policy": 85, "other": 51 }, "warnings": [], "escalations": 15 },
-      { "done": 1604, "total": 2500, "costUSD": 0.94, "labelDist": { "pay": 461, "management": 345, "workload-burnout": 414, "growth": 215, "remote-policy": 106, "other": 63 }, "warnings": [{ "kind": "drift", "message": "drift check: agreement on 20 re-judged gold units is 0.06 below the certificate — inside tolerance." }], "escalations": 19 },
-      { "done": 1933, "total": 2500, "costUSD": 1.13, "labelDist": { "pay": 556, "management": 416, "workload-burnout": 499, "growth": 259, "remote-policy": 128, "other": 75 }, "warnings": [{ "kind": "quarantine", "message": "unit u_d12f4a86c3e09b58 quarantined: TRUNCATED", "unitId": "u_d12f4a86c3e09b58" }], "escalations": 24 },
-      { "done": 2241, "total": 2500, "costUSD": 1.31, "labelDist": { "pay": 645, "management": 482, "workload-burnout": 578, "growth": 300, "remote-policy": 148, "other": 88 }, "warnings": [], "escalations": 27 },
-      { "done": 2500, "total": 2500, "costUSD": 1.42, "labelDist": { "pay": 702, "management": 525, "workload-burnout": 629, "growth": 327, "remote-policy": 161, "other": 95 }, "warnings": [], "escalations": 29 }
+      {
+        "done": 122,
+        "total": 2500,
+        "costUSD": 0.07,
+        "labelDist": {
+          "pay": 38,
+          "management": 25,
+          "workload-burnout": 31,
+          "growth": 14,
+          "remote-policy": 8,
+          "other": 6
+        },
+        "warnings": [],
+        "escalations": 1
+      },
+      {
+        "done": 304,
+        "total": 2500,
+        "costUSD": 0.18,
+        "labelDist": {
+          "pay": 92,
+          "management": 64,
+          "workload-burnout": 79,
+          "growth": 38,
+          "remote-policy": 19,
+          "other": 12
+        },
+        "warnings": [],
+        "escalations": 3
+      },
+      {
+        "done": 511,
+        "total": 2500,
+        "costUSD": 0.3,
+        "labelDist": {
+          "pay": 151,
+          "management": 109,
+          "workload-burnout": 131,
+          "growth": 67,
+          "remote-policy": 34,
+          "other": 19
+        },
+        "warnings": [],
+        "escalations": 5
+      },
+      {
+        "done": 745,
+        "total": 2500,
+        "costUSD": 0.44,
+        "labelDist": {
+          "pay": 218,
+          "management": 158,
+          "workload-burnout": 192,
+          "growth": 99,
+          "remote-policy": 49,
+          "other": 29
+        },
+        "warnings": [
+          {
+            "kind": "quarantine",
+            "message": "unit u_84d5f1b7e0c3a926 quarantined: SCHEMA_INVALID",
+            "unitId": "u_84d5f1b7e0c3a926"
+          }
+        ],
+        "escalations": 9
+      },
+      {
+        "done": 1002,
+        "total": 2500,
+        "costUSD": 0.59,
+        "labelDist": {
+          "pay": 290,
+          "management": 214,
+          "workload-burnout": 259,
+          "growth": 134,
+          "remote-policy": 66,
+          "other": 39
+        },
+        "warnings": [],
+        "escalations": 12
+      },
+      {
+        "done": 1290,
+        "total": 2500,
+        "costUSD": 0.76,
+        "labelDist": {
+          "pay": 372,
+          "management": 277,
+          "workload-burnout": 332,
+          "growth": 173,
+          "remote-policy": 85,
+          "other": 51
+        },
+        "warnings": [],
+        "escalations": 15
+      },
+      {
+        "done": 1604,
+        "total": 2500,
+        "costUSD": 0.94,
+        "labelDist": {
+          "pay": 461,
+          "management": 345,
+          "workload-burnout": 414,
+          "growth": 215,
+          "remote-policy": 106,
+          "other": 63
+        },
+        "warnings": [
+          {
+            "kind": "drift",
+            "message": "drift check: agreement on 20 re-judged gold units is 0.06 below the certificate — inside tolerance."
+          }
+        ],
+        "escalations": 19
+      },
+      {
+        "done": 1933,
+        "total": 2500,
+        "costUSD": 1.13,
+        "labelDist": {
+          "pay": 556,
+          "management": 416,
+          "workload-burnout": 499,
+          "growth": 259,
+          "remote-policy": 128,
+          "other": 75
+        },
+        "warnings": [
+          {
+            "kind": "quarantine",
+            "message": "unit u_d12f4a86c3e09b58 quarantined: TRUNCATED",
+            "unitId": "u_d12f4a86c3e09b58"
+          }
+        ],
+        "escalations": 24
+      },
+      {
+        "done": 2241,
+        "total": 2500,
+        "costUSD": 1.31,
+        "labelDist": {
+          "pay": 645,
+          "management": 482,
+          "workload-burnout": 578,
+          "growth": 300,
+          "remote-policy": 148,
+          "other": 88
+        },
+        "warnings": [],
+        "escalations": 27
+      },
+      {
+        "done": 2500,
+        "total": 2500,
+        "costUSD": 1.42,
+        "labelDist": {
+          "pay": 702,
+          "management": 525,
+          "workload-burnout": 629,
+          "growth": 327,
+          "remote-policy": 161,
+          "other": 95
+        },
+        "warnings": [],
+        "escalations": 29
+      }
     ]
   },
   "escalations": {
@@ -127,11 +317,51 @@
   "disagreement": {
     "run_panel_full": {
       "byEntropy": [
-        { "unitId": "u_2847f1a09c3d55b2", "entropy": 1, "labels": { "claude-haiku·9f2e": "management", "gpt-mini·2c81": "workload-burnout", "qwen-7b·loc4": "growth" } },
-        { "unitId": "u_92c8b4f6a1e7d503", "entropy": 0.92, "labels": { "claude-haiku·9f2e": "other", "gpt-mini·2c81": "pay", "qwen-7b·loc4": "other" } },
-        { "unitId": "u_b05c8f2a6d31e947", "entropy": 0.64, "labels": { "claude-haiku·9f2e": "workload-burnout", "gpt-mini·2c81": "management", "qwen-7b·loc4": "workload-burnout" } },
-        { "unitId": "u_5d2b9e8f1a73c460", "entropy": 0.64, "labels": { "claude-haiku·9f2e": "growth", "gpt-mini·2c81": "growth", "qwen-7b·loc4": "management" } },
-        { "unitId": "u_d94a7c1e5b28f063", "entropy": 0.64, "labels": { "claude-haiku·9f2e": "workload-burnout", "gpt-mini·2c81": "workload-burnout", "qwen-7b·loc4": "growth" } }
+        {
+          "unitId": "u_2847f1a09c3d55b2",
+          "entropy": 1,
+          "labels": {
+            "claude-haiku·9f2e": "management",
+            "gpt-mini·2c81": "workload-burnout",
+            "qwen-7b·loc4": "growth"
+          }
+        },
+        {
+          "unitId": "u_92c8b4f6a1e7d503",
+          "entropy": 0.92,
+          "labels": {
+            "claude-haiku·9f2e": "other",
+            "gpt-mini·2c81": "pay",
+            "qwen-7b·loc4": "other"
+          }
+        },
+        {
+          "unitId": "u_b05c8f2a6d31e947",
+          "entropy": 0.64,
+          "labels": {
+            "claude-haiku·9f2e": "workload-burnout",
+            "gpt-mini·2c81": "management",
+            "qwen-7b·loc4": "workload-burnout"
+          }
+        },
+        {
+          "unitId": "u_5d2b9e8f1a73c460",
+          "entropy": 0.64,
+          "labels": {
+            "claude-haiku·9f2e": "growth",
+            "gpt-mini·2c81": "growth",
+            "qwen-7b·loc4": "management"
+          }
+        },
+        {
+          "unitId": "u_d94a7c1e5b28f063",
+          "entropy": 0.64,
+          "labels": {
+            "claude-haiku·9f2e": "workload-burnout",
+            "gpt-mini·2c81": "workload-burnout",
+            "qwen-7b·loc4": "growth"
+          }
+        }
       ],
       "jurorMatrix": {
         "jurors": ["claude-haiku·9f2e", "gpt-mini·2c81", "qwen-7b·loc4"],
@@ -222,8 +452,18 @@
         "calibrationNudge": { "constructName": "Exit theme", "estUnits": 150, "estMinutes": 35 }
       },
       "evidenceCells": {
-        "pay": ["u_03d7e8a1f4b2c690", "u_d12f4a86c3e09b58", "u_3e8c5d0f7a92b441", "u_91b3c07d2e8f4a16"],
-        "workload-burnout": ["u_1f8d3c5b9e72a044", "u_9a4e7b1c2f86d520", "u_b3c1f5d8a07e2964", "u_8800c1d2e4a90b77"],
+        "pay": [
+          "u_03d7e8a1f4b2c690",
+          "u_d12f4a86c3e09b58",
+          "u_3e8c5d0f7a92b441",
+          "u_91b3c07d2e8f4a16"
+        ],
+        "workload-burnout": [
+          "u_1f8d3c5b9e72a044",
+          "u_9a4e7b1c2f86d520",
+          "u_b3c1f5d8a07e2964",
+          "u_8800c1d2e4a90b77"
+        ],
         "management": ["u_c6a91e2f7d40b833", "u_7e50b3d9a2c4f181", "u_0b6f9a2d8c45e317"],
         "other": ["u_47a3e9c5d2f1b860", "u_f29b7d3a1c50e684", "u_92c8b4f6a1e7d503"],
         "growth": ["u_55e0a9d4b7c2f311", "u_16d9a4e7f2c50b38", "u_e73a1d49c8b5f026"],

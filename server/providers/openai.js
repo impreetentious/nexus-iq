@@ -15,8 +15,26 @@ import { Adapter, httpJSON, malformedResponse, mergeCatalogPricing } from "./bas
 // you re-verify these numbers.
 const PRICING_VERIFIED_AT = "2025-09-13";
 const STATIC_CATALOG = [
-  { id: "gpt-4-turbo", name: "GPT-4 Turbo", family: "openai", ctx: 128_000, pricing: { inUSDper1M: 10, outUSDper1M: 30 }, snapshot: "gpt-4-turbo", estimate: true, pricingVerifiedAt: PRICING_VERIFIED_AT },
-  { id: "gpt-5-mini", name: "GPT-5 mini", family: "openai", ctx: 400_000, pricing: { inUSDper1M: 0.25, outUSDper1M: 2 }, snapshot: "gpt-5-mini", estimate: true, pricingVerifiedAt: PRICING_VERIFIED_AT },
+  {
+    id: "gpt-4-turbo",
+    name: "GPT-4 Turbo",
+    family: "openai",
+    ctx: 128_000,
+    pricing: { inUSDper1M: 10, outUSDper1M: 30 },
+    snapshot: "gpt-4-turbo",
+    estimate: true,
+    pricingVerifiedAt: PRICING_VERIFIED_AT,
+  },
+  {
+    id: "gpt-5-mini",
+    name: "GPT-5 mini",
+    family: "openai",
+    ctx: 400_000,
+    pricing: { inUSDper1M: 0.25, outUSDper1M: 2 },
+    snapshot: "gpt-5-mini",
+    estimate: true,
+    pricingVerifiedAt: PRICING_VERIFIED_AT,
+  },
 ];
 
 const CATALOG_TTL_MS = 60 * 60 * 1000; // 1h, matches routes/catalog.js
@@ -27,7 +45,8 @@ const CATALOG_TTL_MS = 60 * 60 * 1000; // 1h, matches routes/catalog.js
 // audio/realtime, transcription, image — including the gpt-4o-* variants that
 // share the chat prefix but are not chat endpoints (gpt-4o-mini-tts, …).
 const CHAT_PREFIX = /^(?:gpt|chatgpt|o\d)/i;
-const NON_CHAT = /(?:embed|tts|whisper|dall-?e|moderation|realtime|audio|transcrib|image|search|computer-use)/i;
+const NON_CHAT =
+  /(?:embed|tts|whisper|dall-?e|moderation|realtime|audio|transcrib|image|search|computer-use)/i;
 const isChatModel = (id) => typeof id === "string" && CHAT_PREFIX.test(id) && !NON_CHAT.test(id);
 
 // ---------------------------------------------------------------------------
@@ -61,7 +80,8 @@ function makeNullable(node) {
   if (!node || typeof node !== "object") return node;
   const out = { ...node };
   if (Array.isArray(out.anyOf)) {
-    if (!out.anyOf.some((m) => typeList(m?.type).includes("null"))) out.anyOf = [...out.anyOf, { type: "null" }];
+    if (!out.anyOf.some((m) => typeList(m?.type).includes("null")))
+      out.anyOf = [...out.anyOf, { type: "null" }];
     return out;
   }
   let types = typeList(out.type);
@@ -77,9 +97,13 @@ export function toOpenAIStrict(schema) {
   const out = { ...schema };
   if (Array.isArray(out.anyOf)) out.anyOf = out.anyOf.map(toOpenAIStrict);
   if (out.items !== undefined) {
-    out.items = Array.isArray(out.items) ? out.items.map(toOpenAIStrict) : toOpenAIStrict(out.items);
+    out.items = Array.isArray(out.items)
+      ? out.items.map(toOpenAIStrict)
+      : toOpenAIStrict(out.items);
   }
-  const isObject = typeList(out.type).includes("object") || (out.type === undefined && out.properties !== undefined);
+  const isObject =
+    typeList(out.type).includes("object") ||
+    (out.type === undefined && out.properties !== undefined);
   if (isObject) {
     if (out.type === undefined) out.type = "object"; // Director-generated schemas may omit it; strict demands it
     out.additionalProperties = false;
@@ -122,7 +146,11 @@ function stripTransformNulls(value, schema) {
 
 export class OpenAIAdapter extends Adapter {
   constructor(cfg = {}) {
-    super({ name: cfg.name ?? "openai", apiKey: cfg.apiKey, baseUrl: cfg.baseUrl ?? "https://api.openai.com" });
+    super({
+      name: cfg.name ?? "openai",
+      apiKey: cfg.apiKey,
+      baseUrl: cfg.baseUrl ?? "https://api.openai.com",
+    });
   }
 
   capabilities() {
@@ -154,7 +182,11 @@ export class OpenAIAdapter extends Adapter {
 
   async complete(req) {
     if (!this.apiKey) {
-      throw new NexusIQError("CONFIG_MISSING", `${this.name}: no API key configured (Settings → Providers)`, { provider: this.name });
+      throw new NexusIQError(
+        "CONFIG_MISSING",
+        `${this.name}: no API key configured (Settings → Providers)`,
+        { provider: this.name },
+      );
     }
     const raw = await httpJSON("POST", `${this.baseUrl}/v1/chat/completions`, {
       headers: this.headers(),
@@ -176,7 +208,11 @@ export class OpenAIAdapter extends Adapter {
       throw new NexusIQError(
         "PROVIDER_REFUSAL",
         `${this.name}: model refused the request: ${String(message.refusal).slice(0, 300)}`,
-        { provider: this.name, refusal: message.refusal, finishReason: choice.finish_reason ?? null },
+        {
+          provider: this.name,
+          refusal: message.refusal,
+          finishReason: choice.finish_reason ?? null,
+        },
       );
     }
     if (choice.finish_reason === "length" && req.schema) {
@@ -189,7 +225,11 @@ export class OpenAIAdapter extends Adapter {
     const text = typeof message.content === "string" ? message.content : undefined;
     let json;
     if (req.schema && text !== undefined) {
-      try { json = JSON.parse(text); } catch { /* completeWithRepair handles it */ }
+      try {
+        json = JSON.parse(text);
+      } catch {
+        /* completeWithRepair handles it */
+      }
       // Normalize strict-dialect nulls to ABSENT against the ORIGINAL schema:
       // downstream (`json.confidence ?? null` in judge.js, validateSchema)
       // treats optional fields as present-or-absent, never explicit null.
@@ -198,7 +238,10 @@ export class OpenAIAdapter extends Adapter {
     return {
       text,
       json,
-      usage: { inputTokens: raw.usage?.prompt_tokens ?? 0, outputTokens: raw.usage?.completion_tokens ?? 0 },
+      usage: {
+        inputTokens: raw.usage?.prompt_tokens ?? 0,
+        outputTokens: raw.usage?.completion_tokens ?? 0,
+      },
       finishReason: choice.finish_reason ?? "stop",
       raw,
     };
@@ -227,10 +270,12 @@ export class OpenAIAdapter extends Adapter {
     const structuredOutput = this.capabilities().structuredOutput;
     const data = raw.data
       .filter((m) => m && isChatModel(m.id))
-      .map((m) => mergeCatalogPricing(
-        { id: m.id, name: m.id, family: "openai", structuredOutput },
-        STATIC_CATALOG,
-      ));
+      .map((m) =>
+        mergeCatalogPricing(
+          { id: m.id, name: m.id, family: "openai", structuredOutput },
+          STATIC_CATALOG,
+        ),
+      );
     this._catalogCache = { at: Date.now(), data };
     return data.map((m) => ({ ...m, pricing: { ...m.pricing } }));
   }

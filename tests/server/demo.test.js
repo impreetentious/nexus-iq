@@ -57,7 +57,11 @@ async function call(method, p, body) {
   const res = await fetch(base + p, init);
   const text = await res.text();
   let json = null;
-  try { json = JSON.parse(text); } catch { /* non-JSON body */ }
+  try {
+    json = JSON.parse(text);
+  } catch {
+    /* non-JSON body */
+  }
   return { status: res.status, json, text };
 }
 
@@ -70,13 +74,19 @@ async function ok(method, p, body) {
 
 async function fail(method, p, body, status, code) {
   const r = await call(method, p, body);
-  assert.equal(r.status, status, `${method} ${p} expected ${status}, got ${r.status}: ${r.text?.slice(0, 300)}`);
+  assert.equal(
+    r.status,
+    status,
+    `${method} ${p} expected ${status}, got ${r.status}: ${r.text?.slice(0, 300)}`,
+  );
   assert.equal(r.json?.ok, false);
-  if (code) assert.equal(r.json.error.code, code, `expected error code ${code}, got ${r.json.error.code}`);
+  if (code)
+    assert.equal(r.json.error.code, code, `expected error code ${code}, got ${r.json.error.code}`);
 }
 
 const SLUG = "techcorp-exit";
-const unitsFile = (slug, corpusId) => path.join(projectDir(slug), "corpora", corpusId, "units.ndjson");
+const unitsFile = (slug, corpusId) =>
+  path.join(projectDir(slug), "corpora", corpusId, "units.ndjson");
 
 // =========================================================================
 
@@ -91,26 +101,46 @@ test("status reports the CSV present and the demo project absent before reset", 
 test("reset creates the demo project, ingests the sampled CSV, and returns the guided steps", async () => {
   const data = await ok("POST", "/api/demo/reset", { sampleRows: 5 });
   assert.equal(data.slug, SLUG);
-  assert.match(data.corpusId, /^corp_/, `corpusId should be a store-minted id (got ${data.corpusId})`);
-  assert.equal(data.unitCount, 5, "sampleRows: 5 → five units on disk (the CSV's response column is non-empty for these rows)");
+  assert.match(
+    data.corpusId,
+    /^corp_/,
+    `corpusId should be a store-minted id (got ${data.corpusId})`,
+  );
+  assert.equal(
+    data.unitCount,
+    5,
+    "sampleRows: 5 → five units on disk (the CSV's response column is non-empty for these rows)",
+  );
   assert.equal(data.skipped, 0, "no empty response cells in the sampled slice");
-  assert.ok(Array.isArray(data.steps) && data.steps.length > 0, "the guided walkthrough carries next steps");
+  assert.ok(
+    Array.isArray(data.steps) && data.steps.length > 0,
+    "the guided walkthrough carries next steps",
+  );
   for (const step of data.steps) assert.equal(typeof step, "string");
 
   // The project bundle exists with the pinned director slot.
   const project = await ok("GET", `/api/projects/${SLUG}`);
   assert.equal(project.slug, SLUG);
   assert.equal(project.privacyMode, "open");
-  assert.deepEqual({ provider: project.director?.provider, model: project.director?.model }, {
-    provider: "mock", model: "mock-1",
-  }, "the demo director slot is mock/mock-1");
+  assert.deepEqual(
+    { provider: project.director?.provider, model: project.director?.model },
+    {
+      provider: "mock",
+      model: "mock-1",
+    },
+    "the demo director slot is mock/mock-1",
+  );
   assert.equal(project.corpora.length, 1);
   const corpus = project.corpora[0];
   assert.equal(corpus.id, data.corpusId);
   assert.equal(corpus.unitCount, 5);
   assert.equal(corpus.textColumn, "response");
   assert.equal(corpus.scheme, "response");
-  assert.equal(corpus.pii?.mode, "scan", "scan is the confirm-time default and the demo inherits it");
+  assert.equal(
+    corpus.pii?.mode,
+    "scan",
+    "scan is the confirm-time default and the demo inherits it",
+  );
 });
 
 test("reset writes units.ndjson AND ledgers the same events a real confirm would", async () => {
@@ -128,10 +158,16 @@ test("reset writes units.ndjson AND ledgers the same events a real confirm would
   // Ledger: project.created + corpus.imported + corpus.unitized, in order.
   const ledgerPath = path.join(projectDir(SLUG), "ledger.ndjson");
   await access(ledgerPath); // throws if missing — the ledger has to exist
-  const events = (await readFile(ledgerPath, "utf8")).trim().split("\n").map((l) => JSON.parse(l));
+  const events = (await readFile(ledgerPath, "utf8"))
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
   const types = events.map((e) => e.type);
-  assert.deepEqual(types.slice(-3), ["project.created", "corpus.imported", "corpus.unitized"],
-    `demo reset ledgers project.created → corpus.imported → corpus.unitized (got ${types.join(", ")})`);
+  assert.deepEqual(
+    types.slice(-3),
+    ["project.created", "corpus.imported", "corpus.unitized"],
+    `demo reset ledgers project.created → corpus.imported → corpus.unitized (got ${types.join(", ")})`,
+  );
 });
 
 test("reset is idempotent — a second call overwrites the prior bundle deterministically", async () => {
@@ -142,7 +178,11 @@ test("reset is idempotent — a second call overwrites the prior bundle determin
   // corpus count on disk stays 1 (the delete guarantees no drift).
   assert.equal(second.slug, first.slug);
   const project = await ok("GET", `/api/projects/${SLUG}`);
-  assert.equal(project.corpora.length, 1, "old corpora do not accumulate — reset overwrites the whole bundle");
+  assert.equal(
+    project.corpora.length,
+    1,
+    "old corpora do not accumulate — reset overwrites the whole bundle",
+  );
   assert.equal(project.corpora[0].id, second.corpusId);
 });
 

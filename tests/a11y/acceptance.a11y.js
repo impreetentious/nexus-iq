@@ -35,11 +35,8 @@ async function axeScan(page, name) {
       new Promise((resolve) => setTimeout(resolve, 2000)),
     ]);
   });
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa"])
-    .analyze();
-  const serious = results.violations.filter((v) =>
-    ["serious", "critical"].includes(v.impact));
+  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
+  const serious = results.violations.filter((v) => ["serious", "critical"].includes(v.impact));
   expect(serious, `${name}: ${serious.map((v) => v.id).join(", ")}`).toEqual([]);
 }
 

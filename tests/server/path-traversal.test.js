@@ -23,15 +23,22 @@ before(async () => {
   await mkdir(tmpConfig, { recursive: true });
   // the secret a traversal would target — a sibling of projects/, exactly the
   // real config/keys.json relationship
-  await writeFile(path.join(tmpConfig, "keys.json"), JSON.stringify({ openrouter: SECRET }), "utf8");
+  await writeFile(
+    path.join(tmpConfig, "keys.json"),
+    JSON.stringify({ openrouter: SECRET }),
+    "utf8",
+  );
   process.env.NEXUS_IQ_PROJECTS_DIR = tmpProjects;
   process.env.NEXUS_IQ_CONFIG_DIR = tmpConfig;
   srv = await startServer({ port: 0 });
   base = `http://127.0.0.1:${srv.port}`;
-  const created = await (await fetch(`${base}/api/projects`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: "Trav Probe", privacyMode: "no-training" }),
-  })).json();
+  const created = await (
+    await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Trav Probe", privacyMode: "no-training" }),
+    })
+  ).json();
   slug = created.data.slug;
 });
 
@@ -55,7 +62,9 @@ async function bodyOf(res) {
 
 test("GET analyses/:id — traversal id cannot read the key file", async () => {
   for (const id of ESCAPES) {
-    const { status, text } = await bodyOf(await fetch(`${base}/api/projects/${slug}/analyses/${id}`));
+    const { status, text } = await bodyOf(
+      await fetch(`${base}/api/projects/${slug}/analyses/${id}`),
+    );
     assert.ok(status === 400 || status === 404, `escape ${id} → ${status}, want 400/404`);
     assert.ok(!text.includes(SECRET), `escape ${id} LEAKED the secret`);
   }
@@ -71,7 +80,9 @@ test("GET briefs/:bid — traversal id cannot read the key file", async () => {
 
 test("GET exports/methods?analysisId — traversal id cannot read the key file", async () => {
   for (const id of ESCAPES) {
-    const { status, text } = await bodyOf(await fetch(`${base}/api/projects/${slug}/exports/methods?analysisId=${id}`));
+    const { status, text } = await bodyOf(
+      await fetch(`${base}/api/projects/${slug}/exports/methods?analysisId=${id}`),
+    );
     assert.ok(status === 400 || status === 404, `escape ${id} → ${status}`);
     assert.ok(!text.includes(SECRET), `escape ${id} LEAKED the secret`);
   }
@@ -79,17 +90,22 @@ test("GET exports/methods?analysisId — traversal id cannot read the key file",
 
 test("POST import/confirm — traversal importId cannot read the key file", async () => {
   for (const id of ESCAPES) {
-    const { status, text } = await bodyOf(await fetch(`${base}/api/projects/${slug}/import/confirm`, {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ importId: id, mapping: {}, unitization: {} }),
-    }));
+    const { status, text } = await bodyOf(
+      await fetch(`${base}/api/projects/${slug}/import/confirm`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ importId: id, mapping: {}, unitization: {} }),
+      }),
+    );
     assert.ok(status === 400 || status === 404, `escape ${id} → ${status}`);
     assert.ok(!text.includes(SECRET), `escape ${id} LEAKED the secret`);
   }
 });
 
 test("traversal project slug is rejected", async () => {
-  const { status, text } = await bodyOf(await fetch(`${base}/api/projects/${encodeURIComponent("../../config")}`));
+  const { status, text } = await bodyOf(
+    await fetch(`${base}/api/projects/${encodeURIComponent("../../config")}`),
+  );
   assert.ok(status === 400 || status === 404, `slug escape → ${status}`);
   assert.ok(!text.includes(SECRET), "slug escape LEAKED the secret");
 });
@@ -111,19 +127,34 @@ test("planted sibling project.json is neither readable nor writable via ..%2F sl
 
   const enc = encodeURIComponent("../outside"); // → ..%2Foutside
   const read = await bodyOf(await fetch(`${base}/api/projects/${enc}`));
-  assert.ok(read.status === 400 || read.status === 404, `sibling read → ${read.status}, want 400/404`);
+  assert.ok(
+    read.status === 400 || read.status === 404,
+    `sibling read → ${read.status}, want 400/404`,
+  );
   assert.ok(!read.text.includes(MARK), "sibling project.json LEAKED through the API");
 
-  const write = await bodyOf(await fetch(`${base}/api/projects/${enc}/constructs`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: "Escape", type: "binary" }),
-  }));
-  assert.ok(write.status === 400 || write.status === 404, `sibling write → ${write.status}, want 400/404`);
-  assert.equal(await readFile(plantedFile, "utf8"), before, "a traversal slug MUTATED a file outside projects/");
+  const write = await bodyOf(
+    await fetch(`${base}/api/projects/${enc}/constructs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Escape", type: "binary" }),
+    }),
+  );
+  assert.ok(
+    write.status === 400 || write.status === 404,
+    `sibling write → ${write.status}, want 400/404`,
+  );
+  assert.equal(
+    await readFile(plantedFile, "utf8"),
+    before,
+    "a traversal slug MUTATED a file outside projects/",
+  );
 });
 
 test("a normal id still 404s cleanly (guard does not break valid ids)", async () => {
-  const { status } = await bodyOf(await fetch(`${base}/api/projects/${slug}/analyses/an_doesnotexist`));
+  const { status } = await bodyOf(
+    await fetch(`${base}/api/projects/${slug}/analyses/an_doesnotexist`),
+  );
   assert.equal(status, 404, "a well-formed unknown id is NOT_FOUND, not VALIDATION");
 });
 
@@ -133,25 +164,31 @@ test("a normal id still 404s cleanly (guard does not break valid ids)", async ()
 // state-changing method. A missing Origin (curl, tests) still passes; the
 // loopback bind scopes those to this machine.
 test("mutating requests with a cross-origin Origin are refused (CSRF guard)", async () => {
-  const hostile = await bodyOf(await fetch(`${base}/api/projects`, {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: "https://evil.example.com" },
-    body: JSON.stringify({ name: "CSRF Probe", privacyMode: "open" }),
-  }));
+  const hostile = await bodyOf(
+    await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://evil.example.com" },
+      body: JSON.stringify({ name: "CSRF Probe", privacyMode: "open" }),
+    }),
+  );
   assert.equal(hostile.status, 403, `cross-origin POST → ${hostile.status}, want 403`);
   assert.match(hostile.text, /BAD_ORIGIN/, "expected a BAD_ORIGIN refusal");
 
   // a local Origin is accepted (the app's own fetches carry one)
-  const local = await bodyOf(await fetch(`${base}/api/projects`, {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: `http://127.0.0.1:${srv.port}` },
-    body: JSON.stringify({ name: "Local Origin OK", privacyMode: "open" }),
-  }));
+  const local = await bodyOf(
+    await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: `http://127.0.0.1:${srv.port}` },
+      body: JSON.stringify({ name: "Local Origin OK", privacyMode: "open" }),
+    }),
+  );
   assert.equal(local.status, 200, `same-origin POST → ${local.status}, want 200`);
 
   // a GET with a cross-origin Origin is NOT blocked (reads are not state changes)
-  const read = await bodyOf(await fetch(`${base}/api/projects`, {
-    headers: { origin: "https://evil.example.com" },
-  }));
+  const read = await bodyOf(
+    await fetch(`${base}/api/projects`, {
+      headers: { origin: "https://evil.example.com" },
+    }),
+  );
   assert.equal(read.status, 200, "cross-origin GET must still be served");
 });

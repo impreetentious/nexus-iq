@@ -72,7 +72,11 @@ export function tick(id, { done, total, detail } = {}) {
 }
 
 export function succeed(id, { detail } = {}) {
-  return update(id, { status: "success", detail: detail ?? jobs.get(id)?.detail ?? "", progress: null });
+  return update(id, {
+    status: "success",
+    detail: detail ?? jobs.get(id)?.detail ?? "",
+    progress: null,
+  });
 }
 
 export function fail(id, error) {

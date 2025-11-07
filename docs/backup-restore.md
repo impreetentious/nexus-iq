@@ -2,11 +2,11 @@
 
 Nexus IQ is local-first. Durable state lives on disk:
 
-| Path | Contents |
-| --- | --- |
-| `projects/<slug>/` | Portable study bundle (corpus, instruments, gold, runs, ledger, report). |
+| Path               | Contents                                                                    |
+| ------------------ | --------------------------------------------------------------------------- |
+| `projects/<slug>/` | Portable study bundle (corpus, instruments, gold, runs, ledger, report).    |
 | `config/keys.json` | Provider keys only (mode 0600). Never commit; never put in support bundles. |
-| `config/app.json` | Optional app defaults (e.g. port). |
+| `config/app.json`  | Optional app defaults (e.g. port).                                          |
 
 ## Backup
 

@@ -27,11 +27,7 @@ const out = (name) => join(here, name);
 
 // ------------------------------------------------------- CSV (semicolon-delim)
 {
-  const lines = [
-    "name;city;notes",
-    'Ana;Madrid;"uses, commas; here"',
-    "Ben;Lisbon;fine",
-  ];
+  const lines = ["name;city;notes", 'Ana;Madrid;"uses, commas; here"', "Ben;Lisbon;fine"];
   writeFileSync(out("ingest-semicolon.csv"), lines.join("\n") + "\n", "utf8");
 }
 
@@ -83,7 +79,7 @@ const out = (name) => join(here, name);
       "_rels/.rels": strToU8(rels),
       "word/document.xml": strToU8(document),
     },
-    { level: 6, mtime: new Date(Date.UTC(2024, 0, 1)) }
+    { level: 6, mtime: new Date(Date.UTC(2024, 0, 1)) },
   );
   writeFileSync(out("ingest-min.docx"), zipped);
 }
@@ -158,9 +154,24 @@ Bob: Doing well, thanks.
   const zoom = {
     recording_id: "rec_001",
     transcripts: [
-      { speaker: "Carol", start_time: "00:00:01.200", end_time: "00:00:04.000", text: "Let us begin." },
-      { speaker: "Carol", start_time: "00:00:04.500", end_time: "00:00:07.000", text: "First item is budget." },
-      { speaker: "Dan", start_time: "00:00:08.000", end_time: "00:00:10.000", text: "Sounds good." },
+      {
+        speaker: "Carol",
+        start_time: "00:00:01.200",
+        end_time: "00:00:04.000",
+        text: "Let us begin.",
+      },
+      {
+        speaker: "Carol",
+        start_time: "00:00:04.500",
+        end_time: "00:00:07.000",
+        text: "First item is budget.",
+      },
+      {
+        speaker: "Dan",
+        start_time: "00:00:08.000",
+        end_time: "00:00:10.000",
+        text: "Sounds good.",
+      },
     ],
   };
   writeFileSync(out("ingest-zoom.json"), JSON.stringify(zoom, null, 2), "utf8");
@@ -171,7 +182,7 @@ Bob: Doing well, thanks.
   writeFileSync(
     out("ingest-sample.txt"),
     "First paragraph of plain text.\nStill the first paragraph.\n\nSecond paragraph here.\n\n\nThird paragraph after extra blanks.\n",
-    "utf8"
+    "utf8",
   );
   writeFileSync(
     out("ingest-sample.html"),
@@ -179,7 +190,7 @@ Bob: Doing well, thanks.
 <style>p { color: red; }</style><script>var x = "<p>not text</p>";</script></head>
 <body><h1>Heading One</h1><p>First <b>bold</b> paragraph &amp; more.</p>
 <div>Second block<br>with a break.</div><!-- comment --></body></html>`,
-    "utf8"
+    "utf8",
   );
 }
 

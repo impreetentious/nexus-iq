@@ -30,7 +30,14 @@ import { detect, bestTextColumn } from "../ingest/mapping.js";
 import { unitize } from "../ingest/unitize.js";
 import { scan as junkScan } from "../ingest/junk.js";
 import { scan as piiScan, pseudonymize } from "../ingest/pii.js";
-import { pdirOf, writeJsonAtomic, writeTextAtomic, readJsonFile, corpusUnitsFile, safeId } from "./_shared.js";
+import {
+  pdirOf,
+  writeJsonAtomic,
+  writeTextAtomic,
+  readJsonFile,
+  corpusUnitsFile,
+  safeId,
+} from "./_shared.js";
 
 const PARSERS = {
   ".csv": { mod: "../ingest/csv.js", format: "csv" },
@@ -106,7 +113,10 @@ const PII_MODES = new Set(["off", "scan", "pseudonymize"]);
 // older than PENDING_IMPORT_TTL_MS is deleted. Best-effort; never blocks boot.
 const PENDING_IMPORT_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
-export async function cleanupStalePendingImports({ ttlMs = PENDING_IMPORT_TTL_MS, now = Date.now() } = {}) {
+export async function cleanupStalePendingImports({
+  ttlMs = PENDING_IMPORT_TTL_MS,
+  now = Date.now(),
+} = {}) {
   let removed = 0;
   for (const entry of await listProjects().catch(() => [])) {
     if (!entry || entry.corrupt || !entry.slug) continue;
@@ -125,7 +135,9 @@ export async function cleanupStalePendingImports({ ttlMs = PENDING_IMPORT_TTL_MS
           await rm(file, { force: true }).catch(() => {});
           removed += 1;
         }
-      } catch { /* raced with another remover — fine */ }
+      } catch {
+        /* raced with another remover — fine */
+      }
     }
   }
   return { removed };
@@ -155,12 +167,20 @@ export default [
       const { files } = await parseMultipart(req);
       const file = files.find((f) => f.name === "file") ?? files[0];
       if (!file || !file.buffer?.length) {
-        throw new NexusIQError("VALIDATION", "import requires one uploaded file (multipart field \"file\")", {});
+        throw new NexusIQError(
+          "VALIDATION",
+          'import requires one uploaded file (multipart field "file")',
+          {},
+        );
       }
       const ext = path.extname(file.filename ?? "").toLowerCase();
       const spec = PARSERS[ext];
       if (!spec) {
-        throw new NexusIQError("VALIDATION", `unsupported file type "${ext}" — supported: ${Object.keys(PARSERS).join(" ")}`, { ext });
+        throw new NexusIQError(
+          "VALIDATION",
+          `unsupported file type "${ext}" — supported: ${Object.keys(PARSERS).join(" ")}`,
+          { ext },
+        );
       }
 
       // parsers take file paths: stage the upload inside the bundle's .imports
@@ -180,7 +200,8 @@ export default [
       }
 
       const issues = parsed.issues ?? [];
-      const mapping = Array.isArray(parsed.rows) && parsed.rows.length > 0 ? detect(parsed.rows) : null;
+      const mapping =
+        Array.isArray(parsed.rows) && parsed.rows.length > 0 ? detect(parsed.rows) : null;
       const record = {
         importId,
         filename: file.filename ?? `upload${ext}`,
@@ -205,23 +226,36 @@ export default [
       const body = req.body ?? {};
       const piiMode = body.pii === undefined ? "scan" : body.pii;
       if (!PII_MODES.has(piiMode)) {
-        throw new NexusIQError("VALIDATION", `pii must be "off", "scan" or "pseudonymize" (got ${JSON.stringify(body.pii)})`, { pii: body.pii });
+        throw new NexusIQError(
+          "VALIDATION",
+          `pii must be "off", "scan" or "pseudonymize" (got ${JSON.stringify(body.pii)})`,
+          { pii: body.pii },
+        );
       }
       // the UI wrapper omits importId — fall back to the most recent upload
       const importId = body.importId ?? (await latestImportId(project.slug));
       if (!importId) {
-        throw new NexusIQError("VALIDATION", "no pending import to confirm — upload a file first", {});
+        throw new NexusIQError(
+          "VALIDATION",
+          "no pending import to confirm — upload a file first",
+          {},
+        );
       }
       safeId(importId, "importId"); // never let a traversal id reach the read/rm path
       const record = await readJsonFile(path.join(importsDir(project.slug), `${importId}.json`));
       if (!record) {
-        throw new NexusIQError("NOT_FOUND", `pending import '${importId}' not found (already confirmed?)`, { importId });
+        throw new NexusIQError(
+          "NOT_FOUND",
+          `pending import '${importId}' not found (already confirmed?)`,
+          { importId },
+        );
       }
       const parsed = record.parsed;
-      const scheme = body.unitization?.scheme
-        ?? (parsed.rows ? "response" : parsed.docs ? "paragraph" : "turn");
-      const requestedTextColumn = body.mapping?.textColumn
-        ?? (body.mapping?.columns ?? []).find((c) => c.role === "text")?.name;
+      const scheme =
+        body.unitization?.scheme ?? (parsed.rows ? "response" : parsed.docs ? "paragraph" : "turn");
+      const requestedTextColumn =
+        body.mapping?.textColumn ??
+        (body.mapping?.columns ?? []).find((c) => c.role === "text")?.name;
       const textColumn = resolveTextColumn(parsed, requestedTextColumn);
 
       // Column roles from the import sheet (mapping.columns [{name, role}]).
@@ -234,7 +268,9 @@ export default [
       // already uses as its cache key.
       const columnRoles = Array.isArray(body.mapping?.columns)
         ? body.mapping.columns
-            .filter((c) => c && typeof c.name === "string" && c.name !== "" && typeof c.role === "string")
+            .filter(
+              (c) => c && typeof c.name === "string" && c.name !== "" && typeof c.role === "string",
+            )
             .map((c) => ({ name: c.name, role: c.role }))
         : [];
       const ignoreColumns = columnRoles
@@ -247,7 +283,11 @@ export default [
         ...(ignoreColumns.length ? { ignoreColumns } : {}),
       });
       if (units.length === 0) {
-        throw new NexusIQError("VALIDATION", "unitization produced no units — check the text column and scheme", { scheme, textColumn });
+        throw new NexusIQError(
+          "VALIDATION",
+          "unitization produced no units — check the text column and scheme",
+          { scheme, textColumn },
+        );
       }
 
       // Rows unitize silently dropped because the text-column cell was empty.
@@ -292,7 +332,11 @@ export default [
       const meta = {
         id: corpusId,
         name: body.name ?? record.filename,
-        source: { filename: record.filename, format: record.format, ...(rows !== undefined ? { rows } : {}) },
+        source: {
+          filename: record.filename,
+          format: record.format,
+          ...(rows !== undefined ? { rows } : {}),
+        },
         unitization: { scheme, ...(textColumn ? { textColumn } : {}) },
         unitCount: units.length,
         createdAt: new Date().toISOString(),
@@ -316,25 +360,45 @@ export default [
         p.corpora.push(meta);
       });
       const pdir = pdirOf(project.slug);
-      await ledger.append(pdir, "human", "corpus.imported", { corpusId }, {
-        filename: record.filename,
-        format: record.format,
-        ...(rows !== undefined ? { rows } : {}),
-        pii,
-      });
-      await ledger.append(pdir, "human", "corpus.unitized", { corpusId }, {
-        scheme,
-        unitCount: units.length,
-        junk: junk.counts,
-      });
+      await ledger.append(
+        pdir,
+        "human",
+        "corpus.imported",
+        { corpusId },
+        {
+          filename: record.filename,
+          format: record.format,
+          ...(rows !== undefined ? { rows } : {}),
+          pii,
+        },
+      );
+      await ledger.append(
+        pdir,
+        "human",
+        "corpus.unitized",
+        { corpusId },
+        {
+          scheme,
+          unitCount: units.length,
+          junk: junk.counts,
+        },
+      );
       if (piiMode === "pseudonymize") {
         // the taxonomy's reserved event for exactly this wiring
-        await ledger.append(pdir, "human", "pii.pseudonymized", { corpusId }, {
-          counts: piiVault.counts,
-          tokenCount: piiVault.tokenCount,
-        });
+        await ledger.append(
+          pdir,
+          "human",
+          "pii.pseudonymized",
+          { corpusId },
+          {
+            counts: piiVault.counts,
+            tokenCount: piiVault.tokenCount,
+          },
+        );
       }
-      await rm(path.join(importsDir(project.slug), `${importId}.json`), { force: true }).catch(() => {});
+      await rm(path.join(importsDir(project.slug), `${importId}.json`), { force: true }).catch(
+        () => {},
+      );
 
       return {
         corpusId,

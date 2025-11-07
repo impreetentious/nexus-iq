@@ -12,10 +12,18 @@
         "name": "Pay grievance",
         "type": "binary",
         "definition": "Whether the respondent treats compensation as a decisive grievance (not merely mentioned).",
-        "criteria": { "include": ["explicit complaint about pay level, raises, or fairness framed as decisive"], "exclude": ["pay mentioned only to be dismissed"] },
+        "criteria": {
+          "include": ["explicit complaint about pay level, raises, or fairness framed as decisive"],
+          "exclude": ["pay mentioned only to be dismissed"]
+        },
         "edgeCases": ["sarcastic praise of pay counts as a complaint"],
-        "examples": [{ "text": "the pay was simply too low for the work", "label": "yes", "kind": "positive" }],
-        "categories": [{ "value": "yes", "label": "Yes" }, { "value": "no", "label": "No" }],
+        "examples": [
+          { "text": "the pay was simply too low for the work", "label": "yes", "kind": "positive" }
+        ],
+        "categories": [
+          { "value": "yes", "label": "Yes" },
+          { "value": "no", "label": "No" }
+        ],
         "authoredBy": "director",
         "humanTouched": false,
         "createdAt": "2026-06-04T18:30:00Z"
@@ -25,18 +33,40 @@
         "name": "Quit-intent framing",
         "type": "binary",
         "definition": "Whether the respondent uses explicit quitting / had-to-leave language.",
-        "criteria": { "include": ["first-person quitting or resignation language"], "exclude": ["hypothetical talk about others quitting"] },
+        "criteria": {
+          "include": ["first-person quitting or resignation language"],
+          "exclude": ["hypothetical talk about others quitting"]
+        },
         "edgeCases": [],
-        "examples": [{ "text": "I had to get out before it got worse", "label": "quit", "kind": "positive" }],
-        "categories": [{ "value": "quit", "label": "Quit language" }, { "value": "stay", "label": "None" }],
+        "examples": [
+          { "text": "I had to get out before it got worse", "label": "quit", "kind": "positive" }
+        ],
+        "categories": [
+          { "value": "quit", "label": "Quit language" },
+          { "value": "stay", "label": "None" }
+        ],
         "authoredBy": "director",
         "humanTouched": false,
         "createdAt": "2026-06-04T18:30:00Z"
       }
     ],
     "instruments": [
-      { "constructId": "c_fxpaygriev", "constructName": "Pay grievance", "workerClass": "small", "provider": "anthropic", "model": "claude-3-5-haiku", "snapshot": "claude-3-5-haiku-20241022" },
-      { "constructId": "c_fxquitint", "constructName": "Quit-intent framing", "workerClass": "small", "provider": "anthropic", "model": "claude-3-5-haiku", "snapshot": "claude-3-5-haiku-20241022" }
+      {
+        "constructId": "c_fxpaygriev",
+        "constructName": "Pay grievance",
+        "workerClass": "small",
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5",
+        "snapshot": "claude-haiku-4-5-20251001"
+      },
+      {
+        "constructId": "c_fxquitint",
+        "constructName": "Quit-intent framing",
+        "workerClass": "small",
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5",
+        "snapshot": "claude-haiku-4-5-20251001"
+      }
     ],
     "estimate": {
       "usd": 2.96,
@@ -45,8 +75,24 @@
       "inputTokens": 3920000,
       "outputTokens": 580000,
       "perInstrument": [
-        { "constructId": "c_fxpaygriev", "model": "claude-3-5-haiku", "calls": 2500, "inputTokens": 1960000, "outputTokens": 290000, "estUSD": 1.48, "etaMinutes": 39 },
-        { "constructId": "c_fxquitint", "model": "claude-3-5-haiku", "calls": 2500, "inputTokens": 1960000, "outputTokens": 290000, "estUSD": 1.48, "etaMinutes": 39 }
+        {
+          "constructId": "c_fxpaygriev",
+          "model": "claude-haiku-4-5",
+          "calls": 2500,
+          "inputTokens": 1960000,
+          "outputTokens": 290000,
+          "estUSD": 1.48,
+          "etaMinutes": 39
+        },
+        {
+          "constructId": "c_fxquitint",
+          "model": "claude-haiku-4-5",
+          "calls": 2500,
+          "inputTokens": 1960000,
+          "outputTokens": 290000,
+          "estUSD": 1.48,
+          "etaMinutes": 39
+        }
       ]
     },
     "analysis": {

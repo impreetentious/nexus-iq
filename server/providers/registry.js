@@ -60,7 +60,8 @@ export function getAdapter(project, providerName, { justification, keysPath } = 
   const Ctor = PROVIDERS[providerName];
   if (!Ctor) {
     throw new NexusIQError("CONFIG_MISSING", `unknown provider "${providerName}"`, {
-      provider: providerName, known: Object.keys(PROVIDERS),
+      provider: providerName,
+      known: Object.keys(PROVIDERS),
     });
   }
 
@@ -70,13 +71,21 @@ export function getAdapter(project, providerName, { justification, keysPath } = 
     // the most permissive one. Stored projects always carry a validated mode
     // (objects.js defaults to "open" at creation), so only malformed callers
     // land here.
-    throw new NexusIQError("PRIVACY_BLOCKED", "privacy mode missing from project; refusing to construct an adapter", {
-      mode: null, provider: providerName,
-    });
+    throw new NexusIQError(
+      "PRIVACY_BLOCKED",
+      "privacy mode missing from project; refusing to construct an adapter",
+      {
+        mode: null,
+        provider: providerName,
+      },
+    );
   }
   if (!MODES.has(mode)) {
     // Fail closed: an unrecognized mode is config corruption, not permission.
-    throw new NexusIQError("PRIVACY_BLOCKED", `unknown privacy mode "${mode}"`, { mode, provider: providerName });
+    throw new NexusIQError("PRIVACY_BLOCKED", `unknown privacy mode "${mode}"`, {
+      mode,
+      provider: providerName,
+    });
   }
 
   let ledgerEvent = null;
@@ -135,7 +144,9 @@ function readKeys(path) {
   try {
     return JSON.parse(text);
   } catch (err) {
-    throw new NexusIQError("CONFIG_MISSING", `keys file is not valid JSON: ${err.message}`, { path });
+    throw new NexusIQError("CONFIG_MISSING", `keys file is not valid JSON: ${err.message}`, {
+      path,
+    });
   }
 }
 

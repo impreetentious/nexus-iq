@@ -50,14 +50,14 @@ Name detection is a capitalized-bigram heuristic with a stoplist, not a trained 
 
 ## Repository Map
 
-| Path | Purpose |
-| --- | --- |
-| `pages/` | Next.js shell entrypoints |
-| `public/app/` | Browser UI assets and vanilla JS application code |
-| `server/` | Local backend, routing, analysis engine, reporting, and providers |
-| `demo/` | Seeded demo corpus and its reference results |
-| `tests/` | Unit, integration, server, simulation, and end-to-end coverage |
-| `tools/` | Helper scripts for repo maintenance |
+| Path          | Purpose                                                           |
+| ------------- | ----------------------------------------------------------------- |
+| `pages/`      | Next.js shell entrypoints                                         |
+| `public/app/` | Browser UI assets and vanilla JS application code                 |
+| `server/`     | Local backend, routing, analysis engine, reporting, and providers |
+| `demo/`       | Seeded demo corpus and its reference results                      |
+| `tests/`      | Unit, integration, server, simulation, and end-to-end coverage    |
+| `tools/`      | Helper scripts for repo maintenance                               |
 
 ## Quick Start
 
@@ -186,4 +186,4 @@ MIT © Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v2.6.0
+**Version:** v2.7.0

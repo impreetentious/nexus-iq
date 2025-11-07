@@ -6,12 +6,36 @@
       "type": "nominal",
       "definition": "The primary grievance or reason-for-leaving a respondent foregrounds in their exit response. One label per unit: the theme the respondent treats as decisive, not every theme mentioned.",
       "categories": [
-        { "value": "pay", "label": "Pay & compensation", "anchor": "salary, equity, commission, comp process" },
-        { "value": "management", "label": "Management churn", "anchor": "manager quality, reorgs, leadership absence" },
-        { "value": "workload-burnout", "label": "Workload & burnout", "anchor": "hours, on-call, pace, exhaustion" },
-        { "value": "growth", "label": "Blocked growth", "anchor": "promotion, development, career path" },
-        { "value": "remote-policy", "label": "Remote policy", "anchor": "RTO mandate, location flexibility" },
-        { "value": "other", "label": "Other / none", "anchor": "relocation, personal, no grievance" }
+        {
+          "value": "pay",
+          "label": "Pay & compensation",
+          "anchor": "salary, equity, commission, comp process"
+        },
+        {
+          "value": "management",
+          "label": "Management churn",
+          "anchor": "manager quality, reorgs, leadership absence"
+        },
+        {
+          "value": "workload-burnout",
+          "label": "Workload & burnout",
+          "anchor": "hours, on-call, pace, exhaustion"
+        },
+        {
+          "value": "growth",
+          "label": "Blocked growth",
+          "anchor": "promotion, development, career path"
+        },
+        {
+          "value": "remote-policy",
+          "label": "Remote policy",
+          "anchor": "RTO mandate, location flexibility"
+        },
+        {
+          "value": "other",
+          "label": "Other / none",
+          "anchor": "relocation, personal, no grievance"
+        }
       ],
       "criteria": {
         "include": [
@@ -31,10 +55,30 @@
         "A beloved manager leaving (absence) is management, even with no criticism of any person."
       ],
       "examples": [
-        { "text": "Base salary sat 18% under market for my level and the refresh grants never came.", "label": "pay", "kind": "positive", "unitId": "u_03d7e8a1f4b2c690" },
-        { "text": "The pay was fine, honestly — it was watching every good manager leave while the broken processes stayed.", "label": "management", "kind": "nearmiss", "unitId": "u_2847f1a09c3d55b2" },
-        { "text": "Pay was fair, manager was kind, I just moved cities for family.", "label": "other", "kind": "negative", "unitId": "u_47a3e9c5d2f1b860" },
-        { "text": "Oh sure, the workload was totally reasonable. Eighty-hour weeks build character, right?", "label": "workload-burnout", "kind": "positive", "unitId": "u_8800c1d2e4a90b77" }
+        {
+          "text": "Base salary sat 18% under market for my level and the refresh grants never came.",
+          "label": "pay",
+          "kind": "positive",
+          "unitId": "u_03d7e8a1f4b2c690"
+        },
+        {
+          "text": "The pay was fine, honestly — it was watching every good manager leave while the broken processes stayed.",
+          "label": "management",
+          "kind": "nearmiss",
+          "unitId": "u_2847f1a09c3d55b2"
+        },
+        {
+          "text": "Pay was fair, manager was kind, I just moved cities for family.",
+          "label": "other",
+          "kind": "negative",
+          "unitId": "u_47a3e9c5d2f1b860"
+        },
+        {
+          "text": "Oh sure, the workload was totally reasonable. Eighty-hour weeks build character, right?",
+          "label": "workload-burnout",
+          "kind": "positive",
+          "unitId": "u_8800c1d2e4a90b77"
+        }
       ],
       "authoredBy": "director",
       "humanTouched": false,
@@ -48,7 +92,11 @@
       "categories": [
         { "value": "none", "label": "None", "anchor": "no depletion expressed" },
         { "value": "mild", "label": "Mild", "anchor": "strain noted, coping intact" },
-        { "value": "severe", "label": "Severe", "anchor": "depletion, health language, ‘nothing left’" }
+        {
+          "value": "severe",
+          "label": "Severe",
+          "anchor": "depletion, health language, ‘nothing left’"
+        }
       ],
       "criteria": {
         "include": [
@@ -64,9 +112,24 @@
         "‘The pace was not survivable’ — severe: survivability language is somatic even without symptoms."
       ],
       "examples": [
-        { "text": "On-call every third week for a year. I did the math at my doctor's office.", "label": "severe", "kind": "positive", "unitId": "u_1f8d3c5b9e72a044" },
-        { "text": "Support queue doubled, headcount didn't.", "label": "none", "kind": "nearmiss", "unitId": "u_b05c8f2a6d31e947" },
-        { "text": "Loved the people. Left for money.", "label": "none", "kind": "negative", "unitId": "u_4b9c2e7d80a1f355" }
+        {
+          "text": "On-call every third week for a year. I did the math at my doctor's office.",
+          "label": "severe",
+          "kind": "positive",
+          "unitId": "u_1f8d3c5b9e72a044"
+        },
+        {
+          "text": "Support queue doubled, headcount didn't.",
+          "label": "none",
+          "kind": "nearmiss",
+          "unitId": "u_b05c8f2a6d31e947"
+        },
+        {
+          "text": "Loved the people. Left for money.",
+          "label": "none",
+          "kind": "negative",
+          "unitId": "u_4b9c2e7d80a1f355"
+        }
       ],
       "authoredBy": "human",
       "humanTouched": true,
@@ -78,20 +141,34 @@
       "name": "Voluntary vs regretted exit",
       "type": "binary",
       "definition": "From the legacy 2019 codebook: whether the organization would re-hire the respondent into the same role (regretted) or not (non-regretted).",
-      "categories": [ { "value": "regretted", "label": "Regretted" }, { "value": "non-regretted", "label": "Non-regretted" } ],
-      "criteria": { "include": ["High performers and hard-to-fill roles read regretted."], "exclude": ["Do not use tenure alone."] },
-      "edgeCases": [], "examples": [],
-      "authoredBy": "director", "humanTouched": false,
+      "categories": [
+        { "value": "regretted", "label": "Regretted" },
+        { "value": "non-regretted", "label": "Non-regretted" }
+      ],
+      "criteria": {
+        "include": ["High performers and hard-to-fill roles read regretted."],
+        "exclude": ["Do not use tenure alone."]
+      },
+      "edgeCases": [],
+      "examples": [],
+      "authoredBy": "director",
+      "humanTouched": false,
       "source": "legacy-codebook-2019.docx · p.4"
     },
     {
       "name": "Exit tone",
       "type": "ordinal",
       "definition": "From the legacy codebook: overall tone of the exit response from hostile to warm.",
-      "categories": [ { "value": "hostile", "label": "Hostile" }, { "value": "neutral", "label": "Neutral" }, { "value": "warm", "label": "Warm" } ],
+      "categories": [
+        { "value": "hostile", "label": "Hostile" },
+        { "value": "neutral", "label": "Neutral" },
+        { "value": "warm", "label": "Warm" }
+      ],
       "criteria": { "include": ["Score the close, not the complaint."], "exclude": [] },
-      "edgeCases": [], "examples": [],
-      "authoredBy": "director", "humanTouched": false,
+      "edgeCases": [],
+      "examples": [],
+      "authoredBy": "director",
+      "humanTouched": false,
       "source": "legacy-codebook-2019.docx · p.7"
     }
   ],
@@ -100,15 +177,34 @@
       "name": "Preventable exit",
       "type": "binary",
       "definition": "The respondent describes a departure the organization could plausibly have prevented — a named, fixable grievance (comp, manager, workload, path) rather than relocation, family, or pure opportunity.",
-      "categories": [ { "value": "present", "label": "Preventable" }, { "value": "absent", "label": "Not preventable" } ],
+      "categories": [
+        { "value": "present", "label": "Preventable" },
+        { "value": "absent", "label": "Not preventable" }
+      ],
       "criteria": {
-        "include": ["A specific fixable cause is named as decisive (comp process, staffing, promised promotion)."],
-        "exclude": ["Moves framed as personal (family, relocation, career change) with no organizational grievance."]
+        "include": [
+          "A specific fixable cause is named as decisive (comp process, staffing, promised promotion)."
+        ],
+        "exclude": [
+          "Moves framed as personal (family, relocation, career change) with no organizational grievance."
+        ]
       },
-      "edgeCases": ["“Left for money” with no complaint about the comp process → not preventable unless a raise was requested and refused."],
+      "edgeCases": [
+        "“Left for money” with no complaint about the comp process → not preventable unless a raise was requested and refused."
+      ],
       "examples": [
-        { "text": "I gave finance two comp cycles to fix it. They didn't, so a competitor did.", "label": "present", "kind": "positive", "unitId": "u_03d7e8a1f4b2c690" },
-        { "text": "Pay was fair, manager was kind, I just moved cities for family.", "label": "absent", "kind": "negative", "unitId": "u_47a3e9c5d2f1b860" }
+        {
+          "text": "I gave finance two comp cycles to fix it. They didn't, so a competitor did.",
+          "label": "present",
+          "kind": "positive",
+          "unitId": "u_03d7e8a1f4b2c690"
+        },
+        {
+          "text": "Pay was fair, manager was kind, I just moved cities for family.",
+          "label": "absent",
+          "kind": "negative",
+          "unitId": "u_47a3e9c5d2f1b860"
+        }
       ],
       "authoredBy": "director",
       "humanTouched": false
@@ -117,14 +213,26 @@
       "name": "Counteroffer mentioned",
       "type": "binary",
       "definition": "The response mentions a counteroffer — received, refused, arriving too late, or conspicuously absent — anywhere in the exit account.",
-      "categories": [ { "value": "present", "label": "Mentioned" }, { "value": "absent", "label": "Not mentioned" } ],
+      "categories": [
+        { "value": "present", "label": "Mentioned" },
+        { "value": "absent", "label": "Not mentioned" }
+      ],
       "criteria": {
-        "include": ["Any reference to a retention offer, match, or its absence counts, however brief."],
+        "include": [
+          "Any reference to a retention offer, match, or its absence counts, however brief."
+        ],
         "exclude": ["Generic comp complaints with no offer narrative are absent."]
       },
-      "edgeCases": ["“They suddenly found budget when I resigned” → present: that is a counteroffer story without the word."],
+      "edgeCases": [
+        "“They suddenly found budget when I resigned” → present: that is a counteroffer story without the word."
+      ],
       "examples": [
-        { "text": "Loved the people. Left for money. It really is that simple.", "label": "absent", "kind": "nearmiss", "unitId": "u_4b9c2e7d80a1f355" }
+        {
+          "text": "Loved the people. Left for money. It really is that simple.",
+          "label": "absent",
+          "kind": "nearmiss",
+          "unitId": "u_4b9c2e7d80a1f355"
+        }
       ],
       "authoredBy": "director",
       "humanTouched": false

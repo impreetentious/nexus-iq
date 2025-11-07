@@ -89,7 +89,9 @@ function parseSampleRows(body, query) {
   if (raw === undefined || raw === null || raw === "") return undefined;
   const n = Number(raw);
   if (!Number.isInteger(n) || n <= 0) {
-    throw new NexusIQError("VALIDATION", "sample/sampleRows must be a positive integer", { sample: raw });
+    throw new NexusIQError("VALIDATION", "sample/sampleRows must be a positive integer", {
+      sample: raw,
+    });
   }
   return n;
 }
@@ -143,20 +145,34 @@ async function ingestDemoCsv(slug, { sampleRows } = {}) {
     metaColumns: metaColumnsOf(units),
     sourceName: DEMO_FILENAME,
   };
-  await updateProject(slug, (p) => { p.corpora.push(meta); });
+  await updateProject(slug, (p) => {
+    p.corpora.push(meta);
+  });
 
   const pdir = pdirOf(slug);
-  await ledger.append(pdir, "human", "corpus.imported", { corpusId }, {
-    filename: DEMO_FILENAME,
-    format: "csv",
-    rows,
-    pii,
-  });
-  await ledger.append(pdir, "human", "corpus.unitized", { corpusId }, {
-    scheme,
-    unitCount: units.length,
-    junk: junk.counts,
-  });
+  await ledger.append(
+    pdir,
+    "human",
+    "corpus.imported",
+    { corpusId },
+    {
+      filename: DEMO_FILENAME,
+      format: "csv",
+      rows,
+      pii,
+    },
+  );
+  await ledger.append(
+    pdir,
+    "human",
+    "corpus.unitized",
+    { corpusId },
+    {
+      scheme,
+      unitCount: units.length,
+      junk: junk.counts,
+    },
+  );
   return { corpusId, unitCount: units.length, skipped };
 }
 
@@ -199,11 +215,17 @@ export default [
         director: { provider: "mock", model: "mock-1" },
       });
       await createProjectIfAbsent(project);
-      await ledger.append(pdirOf(project.slug), "human", "project.created", { projectId: project.id }, {
-        name: project.name,
-        slug: project.slug,
-        privacyMode: project.privacyMode,
-      });
+      await ledger.append(
+        pdirOf(project.slug),
+        "human",
+        "project.created",
+        { projectId: project.id },
+        {
+          name: project.name,
+          slug: project.slug,
+          privacyMode: project.privacyMode,
+        },
+      );
 
       const { corpusId, unitCount, skipped } = await ingestDemoCsv(project.slug, { sampleRows });
       return {

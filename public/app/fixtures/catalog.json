@@ -2,15 +2,15 @@
   "providers": {
     "anthropic": [
       {
-        "id": "claude-3-sonnet",
-        "name": "Claude 3 Sonnet",
+        "id": "claude-sonnet-4-5",
+        "name": "Claude Sonnet 4.5",
         "family": "claude",
         "ctx": 200000,
         "pricing": {
           "inUSDper1M": 3,
           "outUSDper1M": 15
         },
-        "snapshot": "claude-3-sonnet-20240229",
+        "snapshot": "claude-sonnet-4-5-20250929",
         "class": "frontier",
         "structuredOutput": true,
         "noTemperature": false,
@@ -18,15 +18,15 @@
         "estimate": true
       },
       {
-        "id": "claude-3-5-haiku",
-        "name": "Claude 3.5 Haiku",
+        "id": "claude-haiku-4-5",
+        "name": "Claude Haiku 4.5",
         "family": "claude",
         "ctx": 200000,
         "pricing": {
           "inUSDper1M": 0.8,
           "outUSDper1M": 4
         },
-        "snapshot": "claude-3-5-haiku-20241022",
+        "snapshot": "claude-haiku-4-5-20251001",
         "class": "small",
         "structuredOutput": true,
         "noTemperature": false,
@@ -110,13 +110,7 @@
         "class": "small",
         "structuredOutput": false,
         "noTemperature": false,
-        "params": [
-          "temperature",
-          "top_p",
-          "max_tokens",
-          "stop",
-          "seed"
-        ],
+        "params": ["temperature", "top_p", "max_tokens", "stop", "seed"],
         "pricingVerifiedAt": "2026-07-01",
         "estimate": true
       }

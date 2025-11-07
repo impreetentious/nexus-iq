@@ -26,11 +26,9 @@ cleanup();
 console.log("building…");
 run("docker", ["build", "-t", IMAGE, "."], { stdio: "inherit" });
 console.log("starting…");
-run("docker", [
-  "run", "-d", "--name", NAME,
-  "-p", `127.0.0.1:${PORT}:3000`,
-  IMAGE,
-], { stdio: "inherit" });
+run("docker", ["run", "-d", "--name", NAME, "-p", `127.0.0.1:${PORT}:3000`, IMAGE], {
+  stdio: "inherit",
+});
 
 let ok = false;
 try {

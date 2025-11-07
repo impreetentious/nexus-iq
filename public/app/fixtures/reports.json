@@ -1,36 +1,107 @@
 {
   "methods": {
-    "markdown": "## Method\n\n### Corpus and unitization\nThe corpus comprises 2,500 open-ended exit-survey responses collected January–December 2025 from a single organization [ledger:a1b2c3d4]. Responses were imported from CSV with automatic column-role detection and unitized at the response level (one unit per respondent) [ledger:b2c3d4e5]. Sixty-one responses were flagged as junk and 24 as duplicates; flagged units were excluded from analysis but retained in the bundle [ledger:c3d4e5f6]. Eighteen responses containing personal names were reversibly pseudonymized; the mapping vault is stored outside the project bundle [ledger:d4e5f607].\n\n### Construct and codebook\nThe construct *Exit theme* (six nominal categories) was drafted by the Director model and subsequently edited and adopted by the research team [ledger:e5f60718]. The codebook specifies inclusion and exclusion criteria, edge-case rules, and worked examples mined from the corpus.\n\n### Gold standard\nA simple random sample of n = 20 units was drawn with inclusion probability π = 0.008 per unit, stored at sampling time [ledger:f6071829]. Two blind human coders labeled the sample independently; inter-coder agreement was computed before any machine comparison (κ = .72, α = .71, 95% CI [.48, .89]) [ledger:0718293a]. Disagreements were resolved by adjudication [ledger:18293a4b].\n\n### Instrument\nMachine labeling used a single LLM judge (claude-3-5-haiku, snapshot claude-3-5-haiku-20241022, temperature 0, pinned) compiled from the codebook with rationale-before-verdict output [ledger:293a4b5c]. The prompt was tuned against Director-labeled silver data over four iterations (final silver agreement α = .815) [ledger:3a4b5c6d], passed a k = 3 test–retest stability check (α = .88) [ledger:4b5c6d7e], and was frozen at calibration with κ = .79 (95% CI [.61, .94]) against adjudicated gold [ledger:5c6d7e8f].\n\n### Estimation\nReported prevalence and cross-tabulated estimates use design-based supervised learning (DSL): machine labels for all units are combined with gold labels on the π-weighted sample via pseudo-outcomes, yielding estimates unbiased with respect to machine error structure; variances use the sandwich estimator [ledger:6d7e8f90]. Naive plug-in estimates are reported alongside for transparency [ledger:7e8f9001]. Machine accuracy affects precision, not validity.\n",
+    "markdown": "## Method\n\n### Corpus and unitization\nThe corpus comprises 2,500 open-ended exit-survey responses collected January–December 2025 from a single organization [ledger:a1b2c3d4]. Responses were imported from CSV with automatic column-role detection and unitized at the response level (one unit per respondent) [ledger:b2c3d4e5]. Sixty-one responses were flagged as junk and 24 as duplicates; flagged units were excluded from analysis but retained in the bundle [ledger:c3d4e5f6]. Eighteen responses containing personal names were reversibly pseudonymized; the mapping vault is stored outside the project bundle [ledger:d4e5f607].\n\n### Construct and codebook\nThe construct *Exit theme* (six nominal categories) was drafted by the Director model and subsequently edited and adopted by the research team [ledger:e5f60718]. The codebook specifies inclusion and exclusion criteria, edge-case rules, and worked examples mined from the corpus.\n\n### Gold standard\nA simple random sample of n = 20 units was drawn with inclusion probability π = 0.008 per unit, stored at sampling time [ledger:f6071829]. Two blind human coders labeled the sample independently; inter-coder agreement was computed before any machine comparison (κ = .72, α = .71, 95% CI [.48, .89]) [ledger:0718293a]. Disagreements were resolved by adjudication [ledger:18293a4b].\n\n### Instrument\nMachine labeling used a single LLM judge (claude-haiku-4-5, snapshot claude-haiku-4-5-20251001, temperature 0, pinned) compiled from the codebook with rationale-before-verdict output [ledger:293a4b5c]. The prompt was tuned against Director-labeled silver data over four iterations (final silver agreement α = .815) [ledger:3a4b5c6d], passed a k = 3 test–retest stability check (α = .88) [ledger:4b5c6d7e], and was frozen at calibration with κ = .79 (95% CI [.61, .94]) against adjudicated gold [ledger:5c6d7e8f].\n\n### Estimation\nReported prevalence and cross-tabulated estimates use design-based supervised learning (DSL): machine labels for all units are combined with gold labels on the π-weighted sample via pseudo-outcomes, yielding estimates unbiased with respect to machine error structure; variances use the sandwich estimator [ledger:6d7e8f90]. Naive plug-in estimates are reported alongside for transparency [ledger:7e8f9001]. Machine accuracy affects precision, not validity.\n",
     "analysisId": "an_crosstab",
     "citations": [
-      { "token": "ledger:a1b2c3d4", "hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90", "type": "corpus.imported" },
-      { "token": "ledger:b2c3d4e5", "hash": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1", "type": "corpus.unitized" },
-      { "token": "ledger:c3d4e5f6", "hash": "c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2", "type": "corpus.unitized" },
-      { "token": "ledger:d4e5f607", "hash": "d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3", "type": "pii.pseudonymized" },
-      { "token": "ledger:e5f60718", "hash": "e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4", "type": "construct.created" },
-      { "token": "ledger:f6071829", "hash": "f6071829293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4", "type": "goldset.sampled" },
-      { "token": "ledger:0718293a", "hash": "0718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6", "type": "goldset.agreement" },
-      { "token": "ledger:18293a4b", "hash": "18293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f607", "type": "goldset.adjudicated" },
-      { "token": "ledger:293a4b5c", "hash": "293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718", "type": "instrument.compiled" },
-      { "token": "ledger:3a4b5c6d", "hash": "3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6071829", "type": "instrument.silver_tuned" },
-      { "token": "ledger:4b5c6d7e", "hash": "4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a", "type": "instrument.stability" },
-      { "token": "ledger:5c6d7e8f", "hash": "5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b", "type": "instrument.frozen" },
-      { "token": "ledger:6d7e8f90", "hash": "6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c", "type": "analysis.created" },
-      { "token": "ledger:7e8f9001", "hash": "7e8f9001a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c", "type": "analysis.created" }
+      {
+        "token": "ledger:a1b2c3d4",
+        "hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "type": "corpus.imported"
+      },
+      {
+        "token": "ledger:b2c3d4e5",
+        "hash": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+        "type": "corpus.unitized"
+      },
+      {
+        "token": "ledger:c3d4e5f6",
+        "hash": "c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2",
+        "type": "corpus.unitized"
+      },
+      {
+        "token": "ledger:d4e5f607",
+        "hash": "d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3",
+        "type": "pii.pseudonymized"
+      },
+      {
+        "token": "ledger:e5f60718",
+        "hash": "e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4",
+        "type": "construct.created"
+      },
+      {
+        "token": "ledger:f6071829",
+        "hash": "f6071829293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4",
+        "type": "goldset.sampled"
+      },
+      {
+        "token": "ledger:0718293a",
+        "hash": "0718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6",
+        "type": "goldset.agreement"
+      },
+      {
+        "token": "ledger:18293a4b",
+        "hash": "18293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f607",
+        "type": "goldset.adjudicated"
+      },
+      {
+        "token": "ledger:293a4b5c",
+        "hash": "293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718",
+        "type": "instrument.compiled"
+      },
+      {
+        "token": "ledger:3a4b5c6d",
+        "hash": "3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6071829",
+        "type": "instrument.silver_tuned"
+      },
+      {
+        "token": "ledger:4b5c6d7e",
+        "hash": "4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a",
+        "type": "instrument.stability"
+      },
+      {
+        "token": "ledger:5c6d7e8f",
+        "hash": "5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b",
+        "type": "instrument.frozen"
+      },
+      {
+        "token": "ledger:6d7e8f90",
+        "hash": "6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+        "type": "analysis.created"
+      },
+      {
+        "token": "ledger:7e8f9001",
+        "hash": "7e8f9001a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
+        "type": "analysis.created"
+      }
     ]
   },
   "replication": {
     "files": [
       { "path": "MANIFEST.json", "note": "sha256 of every member" },
       { "path": "codebook.md", "note": "construct definitions, criteria, edge cases, examples" },
-      { "path": "instruments/inst_judge_f.json", "note": "frozen payload incl. full prompt, model, snapshot, params" },
+      {
+        "path": "instruments/inst_judge_f.json",
+        "note": "frozen payload incl. full prompt, model, snapshot, params"
+      },
       { "path": "dictionaries/work-themes.json", "note": "term lists, weights, negation window" },
-      { "path": "gold/g_theme1.csv", "note": "unit ids, coder labels, adjudicated labels, π per unit" },
-      { "path": "outputs/run_panel_full.csv", "note": "per-unit per-juror labels, confidence, escalation flags" },
+      {
+        "path": "gold/g_theme1.csv",
+        "note": "unit ids, coder labels, adjudicated labels, π per unit"
+      },
+      {
+        "path": "outputs/run_panel_full.csv",
+        "note": "per-unit per-juror labels, confidence, escalation flags"
+      },
       { "path": "agreement.json", "note": "human–human and instrument-vs-gold reports with CIs" },
       { "path": "analysis-specs.json", "note": "every analysis spec and its computed results" },
-      { "path": "reproduce.R", "note": "targets the dsl package; reproduces every corrected estimate" },
-      { "path": "reproduce.py", "note": "numpy/statsmodels equivalents with expected numbers embedded" }
+      {
+        "path": "reproduce.R",
+        "note": "targets the dsl package; reproduces every corrected estimate"
+      },
+      {
+        "path": "reproduce.py",
+        "note": "numpy/statsmodels equivalents with expected numbers embedded"
+      }
     ],
     "goldTextNote": "Gold-set verbatims are included only when you switch this on — license and PII review is yours.",
     "sizeApprox": "1.1 MB"

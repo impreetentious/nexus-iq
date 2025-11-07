@@ -49,7 +49,11 @@ async function call(method, p, body) {
   const res = await fetch(base + p, init);
   const text = await res.text();
   let json = null;
-  try { json = JSON.parse(text); } catch { /* non-JSON body (ZIP, error text) */ }
+  try {
+    json = JSON.parse(text);
+  } catch {
+    /* non-JSON body (ZIP, error text) */
+  }
   return { status: res.status, json, text };
 }
 
@@ -80,7 +84,10 @@ const PLANTED_VAULT_SECRET = "leaked-original-string@example.com";
 
 test("support bundle: MANIFEST + members present, redaction holds against a planted key + vault file", async () => {
   // 1. create a project through the real API
-  const created = await call("POST", "/api/projects", { name: "Diagnostic Probe", privacyMode: "open" });
+  const created = await call("POST", "/api/projects", {
+    name: "Diagnostic Probe",
+    privacyMode: "open",
+  });
   assert.equal(created.status, 200, `create → ${created.status}: ${created.text?.slice(0, 200)}`);
   assert.equal(created.json?.ok, true);
   const slug = created.json.data.slug;
@@ -108,13 +115,20 @@ test("support bundle: MANIFEST + members present, redaction holds against a plan
   const importsDir = path.join(tmpProjects, slug, ".imports");
   await mkdir(importsDir, { recursive: true });
   const importedSecret = "raw-uploaded-row-with-identifiers-should-not-ship";
-  await writeFile(path.join(importsDir, "imp_stale.json"), JSON.stringify({ rows: [importedSecret] }), "utf8");
+  await writeFile(
+    path.join(importsDir, "imp_stale.json"),
+    JSON.stringify({ rows: [importedSecret] }),
+    "utf8",
+  );
 
   // 5. GET the support bundle
   const res = await fetch(`${base}/api/projects/${slug}/diagnostics/support-bundle`);
   assert.equal(res.status, 200, `support-bundle → ${res.status}`);
   assert.equal(res.headers.get("content-type"), "application/zip", "ZIP content-type");
-  assert.match(res.headers.get("content-disposition") ?? "", /attachment; filename=".*support-bundle\.zip"/);
+  assert.match(
+    res.headers.get("content-disposition") ?? "",
+    /attachment; filename=".*support-bundle\.zip"/,
+  );
 
   const zipBytes = new Uint8Array(await res.arrayBuffer());
   assert.ok(zipBytes.byteLength > 0, "bundle is non-empty");
@@ -127,9 +141,18 @@ test("support bundle: MANIFEST + members present, redaction holds against a plan
   const names = Object.keys(files);
   for (const [name, u8] of Object.entries(files)) {
     const text = strFromU8(u8);
-    assert.ok(!text.includes(PLANTED_KEY), `member ${name} must not contain the planted provider key`);
-    assert.ok(!text.includes(PLANTED_VAULT_SECRET), `member ${name} must not contain vault contents`);
-    assert.ok(!text.includes(importedSecret), `member ${name} must not contain .imports staging contents`);
+    assert.ok(
+      !text.includes(PLANTED_KEY),
+      `member ${name} must not contain the planted provider key`,
+    );
+    assert.ok(
+      !text.includes(PLANTED_VAULT_SECRET),
+      `member ${name} must not contain vault contents`,
+    );
+    assert.ok(
+      !text.includes(importedSecret),
+      `member ${name} must not contain .imports staging contents`,
+    );
   }
 
   // 7. no member LIVES under vault/, .imports/, or is named keys.json

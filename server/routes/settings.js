@@ -54,13 +54,19 @@ export async function applyProjectSettings(body) {
 
   if (body.privacyMode !== undefined && body.privacyMode !== before.privacyMode) {
     if (!PRIVACY_MODES.includes(body.privacyMode)) {
-      throw new NexusIQError("VALIDATION", `privacyMode must be one of ${PRIVACY_MODES.join(", ")}`, { privacyMode: body.privacyMode });
+      throw new NexusIQError(
+        "VALIDATION",
+        `privacyMode must be one of ${PRIVACY_MODES.join(", ")}`,
+        { privacyMode: body.privacyMode },
+      );
     }
     const downgrade = RANK[body.privacyMode] < RANK[before.privacyMode];
     if (downgrade && body.confirmDowngrade !== true) {
-      throw new NexusIQError("VALIDATION",
+      throw new NexusIQError(
+        "VALIDATION",
         `changing privacy mode from "${before.privacyMode}" to "${body.privacyMode}" weakens this project's privacy guarantees — repeat the request with {confirmDowngrade: true} to proceed`,
-        { from: before.privacyMode, to: body.privacyMode });
+        { from: before.privacyMode, to: body.privacyMode },
+      );
     }
     modeChange = { from: before.privacyMode, to: body.privacyMode, downgrade };
   }
@@ -78,7 +84,9 @@ export async function applyProjectSettings(body) {
         provider: d.provider,
         model: d.model,
         snapshot: d.snapshot ?? null,
-        ...(typeof d.systemSuffix === "string" && d.systemSuffix !== "" ? { systemSuffix: d.systemSuffix } : {}),
+        ...(typeof d.systemSuffix === "string" && d.systemSuffix !== ""
+          ? { systemSuffix: d.systemSuffix }
+          : {}),
       };
     }
   }
@@ -88,7 +96,9 @@ export async function applyProjectSettings(body) {
     if (body.budget !== undefined) {
       const cap = body.budget.capUSD;
       if (cap !== null && cap !== undefined && (typeof cap !== "number" || cap < 0)) {
-        throw new NexusIQError("VALIDATION", "budget.capUSD must be null or a number >= 0", { capUSD: cap });
+        throw new NexusIQError("VALIDATION", "budget.capUSD must be null or a number >= 0", {
+          capUSD: cap,
+        });
       }
       p.budget = p.budget ?? { capUSD: null, spentUSD: 0 };
       if (cap !== undefined) p.budget.capUSD = cap;
@@ -97,7 +107,13 @@ export async function applyProjectSettings(body) {
   });
 
   if (modeChange) {
-    await ledger.append(pdirOf(slug), "human", "privacy.mode_changed", { projectId: updated.id }, modeChange);
+    await ledger.append(
+      pdirOf(slug),
+      "human",
+      "privacy.mode_changed",
+      { projectId: updated.id },
+      modeChange,
+    );
   }
   return updated;
 }
@@ -127,7 +143,10 @@ export default [
         await mkdir(configDir(), { recursive: true, mode: DIR_MODE });
         // provider API keys are the crown jewels — 0600 so other OS users on a
         // shared machine cannot read them
-        await writeFile(keysFile(), JSON.stringify(existing, null, 2), { encoding: "utf8", mode: FILE_MODE });
+        await writeFile(keysFile(), JSON.stringify(existing, null, 2), {
+          encoding: "utf8",
+          mode: FILE_MODE,
+        });
         // rotated keys are invisible to the adapter cache key — drop it
         clearAdapterCache();
         result.keysUpdated = Object.keys(body.keys);
@@ -135,7 +154,9 @@ export default [
 
       if (body.port !== undefined) {
         if (!Number.isInteger(body.port) || body.port < 0 || body.port > 65535) {
-          throw new NexusIQError("VALIDATION", "port must be an integer 0–65535", { port: body.port });
+          throw new NexusIQError("VALIDATION", "port must be an integer 0–65535", {
+            port: body.port,
+          });
         }
         const app = (await readJsonFile(path.join(configDir(), "app.json"))) ?? {};
         app.port = body.port;
@@ -145,7 +166,10 @@ export default [
       }
 
       if (body.project !== undefined) {
-        result.project = await applyProjectSettings({ ...body.project, confirmDowngrade: body.confirmDowngrade ?? body.project.confirmDowngrade });
+        result.project = await applyProjectSettings({
+          ...body.project,
+          confirmDowngrade: body.confirmDowngrade ?? body.project.confirmDowngrade,
+        });
       }
 
       return { ...(await currentSettings()), ...result };

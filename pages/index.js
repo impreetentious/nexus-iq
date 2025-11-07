@@ -19,7 +19,10 @@ export default function Home() {
         // A fast initial child boot can publish its first route before this
         // effect attaches the listener. The tiny same-origin handshake makes
         // the initial title as reliable as later navigation events.
-        frame.contentWindow?.postMessage({ type: "nexus-iq:request-route" }, window.location.origin);
+        frame.contentWindow?.postMessage(
+          { type: "nexus-iq:request-route" },
+          window.location.origin,
+        );
       } catch {
         // The frame may still be navigating; its load handler asks again.
       }
@@ -48,7 +51,11 @@ export default function Home() {
       if (!message || message.type !== "nexus-iq:route") return;
       const hash = routeHash(message.hash);
       if (window.location.hash !== hash) {
-        window.history.pushState(null, "", `${window.location.pathname}${window.location.search}${hash}`);
+        window.history.pushState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}${hash}`,
+        );
       }
       if (typeof message.title === "string" && message.title) document.title = message.title;
     };
@@ -70,5 +77,12 @@ export default function Home() {
     };
   }, []);
 
-  return <iframe ref={frameRef} title="Nexus IQ" src={src} style={{ border: "none", width: "100%", height: "100vh" }} />;
+  return (
+    <iframe
+      ref={frameRef}
+      title="Nexus IQ"
+      src={src}
+      style={{ border: "none", width: "100%", height: "100vh" }}
+    />
+  );
 }

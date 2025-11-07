@@ -25,17 +25,27 @@ export function init({ mount } = {}) {
     aria: { label: "Operation center" },
   });
   panel.append(
-    el("header", { class: "opscenter__head" },
+    el(
+      "header",
+      { class: "opscenter__head" },
       el("h2", { class: "opscenter__title" }, "Operations"),
-      el("button", {
-        class: "opscenter__close",
-        type: "button",
-        aria: { label: "Close operation center" },
-        onclick: close,
-      }, "×")),
-    listEl = el("div", { class: "opscenter__list", role: "list" }),
-    el("p", { class: "opscenter__foot faint" },
-      "Runs, imports, exports, and Director calls share this queue. Leaving a screen does not cancel work."),
+      el(
+        "button",
+        {
+          class: "opscenter__close",
+          type: "button",
+          aria: { label: "Close operation center" },
+          onclick: close,
+        },
+        "×",
+      ),
+    ),
+    (listEl = el("div", { class: "opscenter__list", role: "list" })),
+    el(
+      "p",
+      { class: "opscenter__foot faint" },
+      "Runs, imports, exports, and Director calls share this queue. Leaving a screen does not cancel work.",
+    ),
   );
   host.append(panel);
 
@@ -92,32 +102,54 @@ function paint() {
 }
 
 function row(job) {
-  const pct = job.progress && job.progress.total
-    ? Math.min(100, Math.round((100 * (job.progress.done ?? 0)) / job.progress.total))
-    : null;
-  const statusLabel = {
-    running: "Running",
-    success: "Done",
-    error: "Failed",
-    cancelled: "Cancelled",
-  }[job.status] ?? job.status;
+  const pct =
+    job.progress && job.progress.total
+      ? Math.min(100, Math.round((100 * (job.progress.done ?? 0)) / job.progress.total))
+      : null;
+  const statusLabel =
+    {
+      running: "Running",
+      success: "Done",
+      error: "Failed",
+      cancelled: "Cancelled",
+    }[job.status] ?? job.status;
 
-  const body = el("div", { class: "opscenter__row", role: "listitem", dataset: { status: job.status } },
-    el("div", { class: "opscenter__row-top" },
-      el("span", { class: `opscenter__kind chip chip--${job.kind === "run" ? "machine" : "quiet"}` }, job.kind),
+  const body = el(
+    "div",
+    { class: "opscenter__row", role: "listitem", dataset: { status: job.status } },
+    el(
+      "div",
+      { class: "opscenter__row-top" },
+      el(
+        "span",
+        { class: `opscenter__kind chip chip--${job.kind === "run" ? "machine" : "quiet"}` },
+        job.kind,
+      ),
       el("span", { class: "opscenter__label" }, job.label),
-      el("span", { class: "opscenter__status data faint" }, statusLabel)),
+      el("span", { class: "opscenter__status data faint" }, statusLabel),
+    ),
     job.detail ? el("p", { class: "opscenter__detail faint" }, job.detail) : null,
     pct != null
-      ? el("div", { class: "opscenter__track", aria: { hidden: "true" } },
-          el("div", { class: "opscenter__fill", style: { width: `${pct}%` } }))
+      ? el(
+          "div",
+          { class: "opscenter__track", aria: { hidden: "true" } },
+          el("div", { class: "opscenter__fill", style: { width: `${pct}%` } }),
+        )
       : job.status === "running"
-        ? el("div", { class: "opscenter__indeterminate", role: "status", aria: { label: "In progress" } })
+        ? el("div", {
+            class: "opscenter__indeterminate",
+            role: "status",
+            aria: { label: "In progress" },
+          })
         : null,
   );
 
   if (job.href) {
-    const link = el("a", { class: "opscenter__link", href: `#/${String(job.href).replace(/^#?\/?/, "")}` }, "Open");
+    const link = el(
+      "a",
+      { class: "opscenter__link", href: `#/${String(job.href).replace(/^#?\/?/, "")}` },
+      "Open",
+    );
     link.addEventListener("click", () => close());
     body.append(link);
   }

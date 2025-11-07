@@ -20,10 +20,13 @@ before(async () => {
   process.env.NEXUS_IQ_CONFIG_DIR = tmpConfig;
   srv = await startServer({ port: 0 });
   base = `http://127.0.0.1:${srv.port}`;
-  const created = await (await fetch(`${base}/api/projects`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: "Modes Probe", privacyMode: "open" }),
-  })).json();
+  const created = await (
+    await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Modes Probe", privacyMode: "open" }),
+    })
+  ).json();
   slug = created.data.slug;
 });
 
@@ -39,15 +42,24 @@ const mode = async (p) => (await stat(p)).mode & 0o777;
 
 test("a new project bundle is created 0700 dir / 0600 project.json", { skip: !POSIX }, async () => {
   assert.equal(await mode(path.join(tmpProjects, slug)), 0o700, "project dir must be owner-only");
-  assert.equal(await mode(path.join(tmpProjects, slug, "project.json")), 0o600, "project.json must be owner-only");
+  assert.equal(
+    await mode(path.join(tmpProjects, slug, "project.json")),
+    0o600,
+    "project.json must be owner-only",
+  );
 });
 
 test("provider keys.json is written 0600", { skip: !POSIX }, async () => {
   await fetch(`${base}/api/settings`, {
-    method: "PUT", headers: { "content-type": "application/json" },
+    method: "PUT",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({ keys: { openrouter: "sk-or-secret" } }),
   });
-  assert.equal(await mode(path.join(tmpConfig, "keys.json")), 0o600, "keys.json must be owner-only");
+  assert.equal(
+    await mode(path.join(tmpConfig, "keys.json")),
+    0o600,
+    "keys.json must be owner-only",
+  );
 });
 
 test("cleanupStalePendingImports drops staging older than the TTL, keeps fresh", async () => {

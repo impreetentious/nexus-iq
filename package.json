@@ -1,6 +1,6 @@
 {
   "name": "nexus-iq",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "Local-first qualitative text measurement platform.",
   "type": "module",
   "license": "MIT",
@@ -19,6 +19,8 @@
     "start:docker": "concurrently \"next start -H 0.0.0.0\" \"npm run server\"",
     "test": "node --test tests/unit/*.test.js tests/server/*.test.js tests/e2e/*.test.js tests/integration/*.test.js tests/sim/*.test.js",
     "test:a11y": "playwright test -c playwright.config.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "check:version": "node scripts/check-version-coherence.mjs",
     "docker:smoke": "node scripts/docker-smoke.mjs"
   },
@@ -27,7 +29,7 @@
     "concurrently": "^8.0.1",
     "fflate": "^0.8.2",
     "mammoth": "^1.8.0",
-    "next": "^15.5.3",
+    "next": "^16.0.0",
     "pdfjs-dist": "^4.10.38",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -35,7 +37,8 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.1",
-    "@playwright/test": "^1.52.0"
+    "@playwright/test": "^1.52.0",
+    "prettier": "^3.6.2"
   },
   "overrides": {
     "postcss": "^8.5.6"

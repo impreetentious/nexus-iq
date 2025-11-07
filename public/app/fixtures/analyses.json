@@ -5,7 +5,14 @@
       "kind": "crosstab",
       "level": "corrected",
       "createdAt": "2026-06-04T16:40:00Z",
-      "spec": { "rowKey": "label", "colKey": "dept", "runId": "run_panel_full", "instrumentId": "inst_judge_f", "corpusId": "corp_exit2025", "goldsetId": "g_theme1" },
+      "spec": {
+        "rowKey": "label",
+        "colKey": "dept",
+        "runId": "run_panel_full",
+        "instrumentId": "inst_judge_f",
+        "corpusId": "corp_exit2025",
+        "goldsetId": "g_theme1"
+      },
       "results": {
         "table": {
           "rows": ["growth", "management", "other", "pay", "remote-policy", "workload-burnout"],
@@ -32,12 +39,60 @@
         "groupBy": "dept",
         "positive": "pay",
         "cells": [
-          { "group": "Engineering", "n": 678, "est": 0.22, "se": 0.031, "ciLo": 0.16, "ciHi": 0.28, "naive": { "est": 0.26, "se": 0.017, "ciLo": 0.23, "ciHi": 0.29 } },
-          { "group": "Marketing", "n": 263, "est": 0.19, "se": 0.036, "ciLo": 0.12, "ciHi": 0.26, "naive": { "est": 0.21, "se": 0.025, "ciLo": 0.16, "ciHi": 0.26 } },
-          { "group": "Operations", "n": 444, "est": 0.27, "se": 0.036, "ciLo": 0.2, "ciHi": 0.34, "naive": { "est": 0.3, "se": 0.022, "ciLo": 0.26, "ciHi": 0.34 } },
-          { "group": "People", "n": 161, "est": 0.15, "se": 0.041, "ciLo": 0.07, "ciHi": 0.23, "naive": { "est": 0.18, "se": 0.03, "ciLo": 0.12, "ciHi": 0.24 } },
-          { "group": "Sales", "n": 700, "est": 0.41, "se": 0.041, "ciLo": 0.33, "ciHi": 0.49, "naive": { "est": 0.35, "se": 0.018, "ciLo": 0.31, "ciHi": 0.39 } },
-          { "group": "Support", "n": 339, "est": 0.34, "se": 0.041, "ciLo": 0.26, "ciHi": 0.42, "naive": { "est": 0.31, "se": 0.025, "ciLo": 0.26, "ciHi": 0.36 } }
+          {
+            "group": "Engineering",
+            "n": 678,
+            "est": 0.22,
+            "se": 0.031,
+            "ciLo": 0.16,
+            "ciHi": 0.28,
+            "naive": { "est": 0.26, "se": 0.017, "ciLo": 0.23, "ciHi": 0.29 }
+          },
+          {
+            "group": "Marketing",
+            "n": 263,
+            "est": 0.19,
+            "se": 0.036,
+            "ciLo": 0.12,
+            "ciHi": 0.26,
+            "naive": { "est": 0.21, "se": 0.025, "ciLo": 0.16, "ciHi": 0.26 }
+          },
+          {
+            "group": "Operations",
+            "n": 444,
+            "est": 0.27,
+            "se": 0.036,
+            "ciLo": 0.2,
+            "ciHi": 0.34,
+            "naive": { "est": 0.3, "se": 0.022, "ciLo": 0.26, "ciHi": 0.34 }
+          },
+          {
+            "group": "People",
+            "n": 161,
+            "est": 0.15,
+            "se": 0.041,
+            "ciLo": 0.07,
+            "ciHi": 0.23,
+            "naive": { "est": 0.18, "se": 0.03, "ciLo": 0.12, "ciHi": 0.24 }
+          },
+          {
+            "group": "Sales",
+            "n": 700,
+            "est": 0.41,
+            "se": 0.041,
+            "ciLo": 0.33,
+            "ciHi": 0.49,
+            "naive": { "est": 0.35, "se": 0.018, "ciLo": 0.31, "ciHi": 0.39 }
+          },
+          {
+            "group": "Support",
+            "n": 339,
+            "est": 0.34,
+            "se": 0.041,
+            "ciLo": 0.26,
+            "ciHi": 0.42,
+            "naive": { "est": 0.31, "se": 0.025, "ciLo": 0.26, "ciHi": 0.36 }
+          }
         ]
       },
       "evidence": {
@@ -60,8 +115,20 @@
       "spec": { "instrumentIds": ["inst_dict", "inst_judge_s"], "corpusId": "corp_exit2025" },
       "results": {
         "instruments": [
-          { "instrumentId": "inst_dict", "name": "work-themes · dictionary", "kind": "dictionary", "level": "exploratory", "runId": "run_dict_full" },
-          { "instrumentId": "inst_judge_s", "name": "exit-theme · judge v3 (tuned)", "kind": "judge", "level": "stabilized", "runId": "run_judge_full" }
+          {
+            "instrumentId": "inst_dict",
+            "name": "work-themes · dictionary",
+            "kind": "dictionary",
+            "level": "exploratory",
+            "runId": "run_dict_full"
+          },
+          {
+            "instrumentId": "inst_judge_s",
+            "name": "exit-theme · judge v3 (tuned)",
+            "kind": "judge",
+            "level": "stabilized",
+            "runId": "run_judge_full"
+          }
         ],
         "n": 2439,
         "percentAgreement": 0.71,
@@ -83,7 +150,12 @@
       },
       "evidence": {
         "cells": {
-          "divergent": ["u_8800c1d2e4a90b77", "u_91b3c07d2e8f4a16", "u_2847f1a09c3d55b2", "u_92c8b4f6a1e7d503"]
+          "divergent": [
+            "u_8800c1d2e4a90b77",
+            "u_91b3c07d2e8f4a16",
+            "u_2847f1a09c3d55b2",
+            "u_92c8b4f6a1e7d503"
+          ]
         }
       }
     },
@@ -92,28 +164,122 @@
       "kind": "subgroup",
       "level": "corrected",
       "createdAt": "2026-06-04T17:15:00Z",
-      "spec": { "instrumentId": "inst_judge_f", "by": "dept", "runId": "run_panel_full", "corpusId": "corp_exit2025", "goldsetId": "g_theme1" },
+      "spec": {
+        "instrumentId": "inst_judge_f",
+        "by": "dept",
+        "runId": "run_panel_full",
+        "corpusId": "corp_exit2025",
+        "goldsetId": "g_theme1"
+      },
       "results": {
         "by": "dept",
         "positive": "pay",
-        "overall": { "goldN": 18, "percentAgreement": 0.777778, "kappa": 0.55, "errorRate": 0.222222 },
+        "overall": {
+          "goldN": 18,
+          "percentAgreement": 0.777778,
+          "kappa": 0.55,
+          "errorRate": 0.222222
+        },
         "groups": [
-          { "group": "Engineering", "n": 678, "dist": { "workload-burnout": 264, "pay": 176, "management": 136, "growth": 80 }, "goldN": 6, "percentAgreement": 0.833333, "kappa": 0.64, "errorRate": 0.166667, "flagged": false, "corrected": { "positive": "pay", "est": 0.22, "se": 0.031, "ciLo": 0.16, "ciHi": 0.28, "naive": { "est": 0.26 } } },
-          { "group": "Operations", "n": 444, "dist": { "management": 192, "pay": 156, "workload-burnout": 120 }, "goldN": 5, "percentAgreement": 0.6, "kappa": 0.18, "errorRate": 0.4, "flagged": true, "corrected": { "positive": "pay", "est": 0.27, "se": 0.036, "ciLo": 0.2, "ciHi": 0.34, "naive": { "est": 0.3 } } },
-          { "group": "Sales", "n": 700, "dist": { "pay": 287, "workload-burnout": 98, "management": 112 }, "goldN": 7, "percentAgreement": 0.857143, "kappa": 0.71, "errorRate": 0.142857, "flagged": false, "corrected": { "positive": "pay", "est": 0.41, "se": 0.041, "ciLo": 0.33, "ciHi": 0.49, "naive": { "est": 0.35 } } },
-          { "group": "Support", "n": 339, "dist": { "workload-burnout": 105, "pay": 115, "management": 64 }, "goldN": 0, "percentAgreement": null, "kappa": null, "errorRate": null, "flagged": false, "note": "no gold-labeled units in this group — the audit cannot read it; extend the gold sample to cover it" }
+          {
+            "group": "Engineering",
+            "n": 678,
+            "dist": { "workload-burnout": 264, "pay": 176, "management": 136, "growth": 80 },
+            "goldN": 6,
+            "percentAgreement": 0.833333,
+            "kappa": 0.64,
+            "errorRate": 0.166667,
+            "flagged": false,
+            "corrected": {
+              "positive": "pay",
+              "est": 0.22,
+              "se": 0.031,
+              "ciLo": 0.16,
+              "ciHi": 0.28,
+              "naive": { "est": 0.26 }
+            }
+          },
+          {
+            "group": "Operations",
+            "n": 444,
+            "dist": { "management": 192, "pay": 156, "workload-burnout": 120 },
+            "goldN": 5,
+            "percentAgreement": 0.6,
+            "kappa": 0.18,
+            "errorRate": 0.4,
+            "flagged": true,
+            "corrected": {
+              "positive": "pay",
+              "est": 0.27,
+              "se": 0.036,
+              "ciLo": 0.2,
+              "ciHi": 0.34,
+              "naive": { "est": 0.3 }
+            }
+          },
+          {
+            "group": "Sales",
+            "n": 700,
+            "dist": { "pay": 287, "workload-burnout": 98, "management": 112 },
+            "goldN": 7,
+            "percentAgreement": 0.857143,
+            "kappa": 0.71,
+            "errorRate": 0.142857,
+            "flagged": false,
+            "corrected": {
+              "positive": "pay",
+              "est": 0.41,
+              "se": 0.041,
+              "ciLo": 0.33,
+              "ciHi": 0.49,
+              "naive": { "est": 0.35 }
+            }
+          },
+          {
+            "group": "Support",
+            "n": 339,
+            "dist": { "workload-burnout": 105, "pay": 115, "management": 64 },
+            "goldN": 0,
+            "percentAgreement": null,
+            "kappa": null,
+            "errorRate": null,
+            "flagged": false,
+            "note": "no gold-labeled units in this group — the audit cannot read it; extend the gold sample to cover it"
+          }
         ],
         "estimator": "dslProportion",
         "outcome": "share of \"pay\"",
         "groupBy": "dept",
         "cells": [
-          { "group": "Engineering", "n": 678, "est": 0.22, "se": 0.031, "ciLo": 0.16, "ciHi": 0.28, "naive": { "est": 0.26, "se": 0.017, "ciLo": 0.23, "ciHi": 0.29 } },
-          { "group": "Operations", "n": 444, "est": 0.27, "se": 0.036, "ciLo": 0.2, "ciHi": 0.34, "naive": { "est": 0.3, "se": 0.022, "ciLo": 0.26, "ciHi": 0.34 } },
-          { "group": "Sales", "n": 700, "est": 0.41, "se": 0.041, "ciLo": 0.33, "ciHi": 0.49, "naive": { "est": 0.35, "se": 0.018, "ciLo": 0.31, "ciHi": 0.39 } }
+          {
+            "group": "Engineering",
+            "n": 678,
+            "est": 0.22,
+            "se": 0.031,
+            "ciLo": 0.16,
+            "ciHi": 0.28,
+            "naive": { "est": 0.26, "se": 0.017, "ciLo": 0.23, "ciHi": 0.29 }
+          },
+          {
+            "group": "Operations",
+            "n": 444,
+            "est": 0.27,
+            "se": 0.036,
+            "ciLo": 0.2,
+            "ciHi": 0.34,
+            "naive": { "est": 0.3, "se": 0.022, "ciLo": 0.26, "ciHi": 0.34 }
+          },
+          {
+            "group": "Sales",
+            "n": 700,
+            "est": 0.41,
+            "se": 0.041,
+            "ciLo": 0.33,
+            "ciHi": 0.49,
+            "naive": { "est": 0.35, "se": 0.018, "ciLo": 0.31, "ciHi": 0.39 }
+          }
         ],
-        "skippedGroups": [
-          { "group": "Support", "reason": "no gold-labeled units in this group" }
-        ]
+        "skippedGroups": [{ "group": "Support", "reason": "no gold-labeled units in this group" }]
       },
       "evidence": {
         "cells": {
@@ -129,7 +295,14 @@
       "kind": "model",
       "level": "corrected",
       "createdAt": "2026-06-04T18:03:00Z",
-      "spec": { "x": ["satisfaction", "tenure_years"], "family": "logit", "runId": "run_panel_full", "instrumentId": "inst_judge_f", "corpusId": "corp_exit2025", "goldsetId": "g_theme1" },
+      "spec": {
+        "x": ["satisfaction", "tenure_years"],
+        "family": "logit",
+        "runId": "run_panel_full",
+        "instrumentId": "inst_judge_f",
+        "corpusId": "corp_exit2025",
+        "goldsetId": "g_theme1"
+      },
       "results": {
         "family": "logit",
         "outcome": "machine label == \"pay\"",
@@ -137,7 +310,14 @@
         "coef": [
           { "name": "(Intercept)", "est": -0.42, "se": 0.21, "z": -2.0, "p": 0.0455 },
           { "name": "satisfaction", "est": -0.38, "se": 0.09, "z": -4.22, "p": 0.000024 },
-          { "name": "tenure_years", "est": -0.05, "se": 0, "z": null, "p": null, "note": "standard error is 0 (no residual variation); z and p are undefined" }
+          {
+            "name": "tenure_years",
+            "est": -0.05,
+            "se": 0,
+            "z": null,
+            "p": null,
+            "note": "standard error is 0 (no residual variation); z and p are undefined"
+          }
         ],
         "naive": [
           { "name": "(Intercept)", "est": -0.31, "se": 0.18, "z": -1.72, "p": 0.0854 },

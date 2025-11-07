@@ -52,8 +52,11 @@ test("adapter.catalog() carries pricingVerifiedAt on every anthropic static mode
   const models = await adapter.catalog();
   assert.ok(models.length > 0, "anthropic ships a non-empty static catalog");
   for (const m of models) {
-    assert.match(m.pricingVerifiedAt ?? "", ISO_DATE,
-      `${m.id} should carry an ISO pricingVerifiedAt (got ${JSON.stringify(m.pricingVerifiedAt)})`);
+    assert.match(
+      m.pricingVerifiedAt ?? "",
+      ISO_DATE,
+      `${m.id} should carry an ISO pricingVerifiedAt (got ${JSON.stringify(m.pricingVerifiedAt)})`,
+    );
     assert.equal(m.estimate, true, `${m.id} is a static estimate`);
   }
 });
@@ -63,17 +66,31 @@ test("adapter.catalog() carries pricingVerifiedAt on every openai static model",
   const models = await adapter.catalog();
   assert.ok(models.length > 0);
   for (const m of models) {
-    assert.match(m.pricingVerifiedAt ?? "", ISO_DATE,
-      `${m.id} should carry an ISO pricingVerifiedAt (got ${JSON.stringify(m.pricingVerifiedAt)})`);
+    assert.match(
+      m.pricingVerifiedAt ?? "",
+      ISO_DATE,
+      `${m.id} should carry an ISO pricingVerifiedAt (got ${JSON.stringify(m.pricingVerifiedAt)})`,
+    );
   }
 });
 
 test("mergeCatalogPricing propagates pricingVerifiedAt from the matched static entry", () => {
   const statics = [
-    { id: "foo-1", name: "Foo 1", ctx: 100, pricing: { inUSDper1M: 1, outUSDper1M: 2 }, snapshot: "foo-1", estimate: true, pricingVerifiedAt: "2026-07-01" },
+    {
+      id: "foo-1",
+      name: "Foo 1",
+      ctx: 100,
+      pricing: { inUSDper1M: 1, outUSDper1M: 2 },
+      snapshot: "foo-1",
+      estimate: true,
+      pricingVerifiedAt: "2026-07-01",
+    },
   ];
   // Prefix match on a dated snapshot inherits the bare entry's date.
-  const merged = mergeCatalogPricing({ id: "foo-1-20260515", name: "Foo 1 (2026-05-15)", family: "test" }, statics);
+  const merged = mergeCatalogPricing(
+    { id: "foo-1-20260515", name: "Foo 1 (2026-05-15)", family: "test" },
+    statics,
+  );
   assert.equal(merged.pricingVerifiedAt, "2026-07-01", "the stamp rides the merged result");
   assert.equal(merged.pricing.inUSDper1M, 1);
 
@@ -98,7 +115,11 @@ test("GET /api/catalog/models exposes the freshness envelope and per-model stamp
   assert.equal(typeof data.cachedAt, "string", "cachedAt is preserved");
   assert.equal(data.staleAfterDays, 90, "policy constant reaches the wire");
   assert.deepEqual(
-    { cachedAt: data.freshness?.cachedAt, staleAfterDays: data.freshness?.staleAfterDays, policy: data.freshness?.policy },
+    {
+      cachedAt: data.freshness?.cachedAt,
+      staleAfterDays: data.freshness?.staleAfterDays,
+      policy: data.freshness?.policy,
+    },
     { cachedAt: data.cachedAt, staleAfterDays: 90, policy: "estimate-ok-stale-not" },
     "freshness envelope carries the policy + staleness budget",
   );
@@ -106,9 +127,17 @@ test("GET /api/catalog/models exposes the freshness envelope and per-model stamp
   const providers = data.providers ?? {};
   assert.ok(Array.isArray(providers.anthropic) && providers.anthropic.length > 0);
   for (const m of providers.anthropic) {
-    assert.match(m.pricingVerifiedAt ?? "", ISO_DATE, `anthropic model ${m.id} should carry pricingVerifiedAt`);
+    assert.match(
+      m.pricingVerifiedAt ?? "",
+      ISO_DATE,
+      `anthropic model ${m.id} should carry pricingVerifiedAt`,
+    );
   }
   for (const m of providers.openai ?? []) {
-    assert.match(m.pricingVerifiedAt ?? "", ISO_DATE, `openai model ${m.id} should carry pricingVerifiedAt`);
+    assert.match(
+      m.pricingVerifiedAt ?? "",
+      ISO_DATE,
+      `openai model ${m.id} should carry pricingVerifiedAt`,
+    );
   }
 });

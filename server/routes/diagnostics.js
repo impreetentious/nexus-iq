@@ -240,9 +240,7 @@ export default [
       if (includeOutputs) {
         const runs = project.runs ?? [];
         const wanted = req.query.runId ? safeId(String(req.query.runId), "run") : null;
-        const pick = wanted
-          ? runs.find((r) => r.id === wanted)
-          : runs[runs.length - 1];
+        const pick = wanted ? runs.find((r) => r.id === wanted) : runs[runs.length - 1];
         if (pick) {
           // runOutputsFile calls safeId(runId, "run") itself — belt + braces
           // against a future caller passing an unvalidated id.
