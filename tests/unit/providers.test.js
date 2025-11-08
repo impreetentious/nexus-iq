@@ -779,7 +779,11 @@ describe("AnthropicAdapter.catalog (live)", () => {
             true,
           );
         }
-        assert.match(call.url, /after_id=claude-3-opus-20240229/, "second page cursors on last_id");
+        assert.match(
+          call.url,
+          /after_id=claude-3-opus-20240229/,
+          "second page cursors on last_id",
+        );
         return modelsPage(
           [{ id: "claude-haiku-4-5-20260101", display_name: "Haiku", type: "model" }],
           false,
