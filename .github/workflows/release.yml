@@ -26,12 +26,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          VER="${TAG#v}"
-          BODY=$(node -e "
-            const fs=require('fs');
-            const md=fs.readFileSync('README.md','utf8');
-            const re=new RegExp('### v'+${JSON.stringify(VER.replace(/\./g,'\\.'))}+'\\n([\\s\\S]*?)(?=\\n### |$)');
-            const m=md.match(re);
-            process.stdout.write(m ? m[1].trim() : 'See README.md Changelog');
-          ")
-          gh release create "$TAG" --title "$TAG" --notes "$BODY"
+          VER="${TAG#v}" node -e '
+            const fs = require("fs");
+            const md = fs.readFileSync("README.md", "utf8");
+            const esc = process.env.VER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const re = new RegExp("^### v" + esc + "\\s*\\n([\\s\\S]*?)(?=\\n### |$)", "m");
+            const m = md.match(re);
+            fs.writeFileSync("release-notes.md", m ? m[1].trim() : "See README.md Changelog");
+          '
+          gh release create "$TAG" --title "$TAG" --notes-file release-notes.md

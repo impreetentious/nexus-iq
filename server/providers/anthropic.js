@@ -15,7 +15,7 @@ const CATALOG_PAGE_CAP = 20; // /v1/models pages are ≤1000 ids; this is a runa
 
 // Pricing is a static estimate (per 1M tokens) used for preflight cost math
 // when no live source exists; every entry is marked `estimate: true`.
-// Figures verified against docs.anthropic.com pricing + model overview,
+// Figures verified against platform.claude.com/docs pricing + model overview,
 // 2025-11 (Claude 3 Opus $15/$75 · 200K ctx; Claude 3.5 Sonnet $3/$15 · 200K ctx; Haiku 4.5
 // $1/$5 · 200K ctx). Re-check on the next model launch — stale numbers here
 // feed BOTH preflight estimates and the live budget meter.

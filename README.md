@@ -103,8 +103,13 @@ Then open `http://localhost:3000`. The image includes `demo/` for the documented
 
 ## Changelog
 
+### v2.7.0
+
+- Weekly Dependabot watcher for npm dependencies and GitHub Actions, so Next.js and toolchain advisories surface as pull requests.
+
 ### v2.6.0
 
+- README rewritten as a standalone public document: what the project is, how to run, verify, and deploy it, and its real limitations. Version tracking reduced to a single `Version:` line.
 - Accessibility suite repaired: the four Playwright + axe specs now collect and pass, and axe waits for enter/leave transitions to settle so a toast caught mid-fade no longer reports a false color-contrast violation.
 
 ### v2.5.8
@@ -186,4 +191,4 @@ MIT © Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v2.7.1
+**Version:** v2.7.2
