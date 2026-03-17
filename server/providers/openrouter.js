@@ -4,7 +4,7 @@
 import { OpenAIAdapter } from "./openai.js";
 import { httpJSON } from "./base.js";
 
-// "meta-llama/llama-3.3-70b" → "meta"; "openai/gpt-4-turbo" → "openai".
+// "meta-llama/llama-3.3-70b" → "meta"; "openai/gpt-5.2" → "openai".
 const familyOf = (modelId) => String(modelId).split("/")[0].split("-")[0];
 
 // OpenRouter pricing is USD per token (string); catalog wants USD per 1M.

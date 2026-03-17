@@ -126,7 +126,7 @@ const anthropicToolResponse = (json) => ({
     id: "msg_01",
     type: "message",
     role: "assistant",
-    model: "claude-3-5-sonnet",
+    model: "claude-sonnet-4-6",
     stop_reason: "tool_use",
     stop_sequence: null,
     usage: { input_tokens: 120, output_tokens: 45 },
@@ -138,7 +138,7 @@ const openaiResponse = (content, extra = {}) => ({
   body: {
     id: "chatcmpl-1",
     object: "chat.completion",
-    model: "gpt-4-turbo",
+    model: "gpt-5.2",
     choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
     usage: { prompt_tokens: 80, completion_tokens: 20 },
     ...extra,
@@ -176,7 +176,7 @@ describe("Pool", () => {
         const pool = new Pool({ concurrency: 1, baseDelayMs: 400 });
         const res = await pool.run(() =>
           adapter.complete({
-            model: "claude-3-5-sonnet",
+            model: "claude-sonnet-4-6",
             messages: [{ role: "user", content: "judge" }],
             schema: judgeSchema,
             temperature: 0,
@@ -491,7 +491,7 @@ describe("AnthropicAdapter", () => {
       async (srv) => {
         const adapter = new AnthropicAdapter({ apiKey: "sk-ant-test", baseUrl: srv.url });
         const res = await adapter.complete({
-          model: "claude-3-5-sonnet",
+          model: "claude-sonnet-4-6",
           messages: [
             { role: "system", content: "You are a careful judge." },
             { role: "user", content: "Label this. <unit>The pay is terrible.</unit>" },
@@ -505,7 +505,7 @@ describe("AnthropicAdapter", () => {
         assert.equal(call.url, "/v1/messages");
         assert.equal(call.headers["x-api-key"], "sk-ant-test");
         assert.equal(call.headers["anthropic-version"], "2023-06-01");
-        assert.equal(call.body.model, "claude-3-5-sonnet");
+        assert.equal(call.body.model, "claude-sonnet-4-6");
         assert.equal(call.body.system, "You are a careful judge.");
         assert.deepEqual(call.body.messages, [
           { role: "user", content: "Label this. <unit>The pay is terrible.</unit>" },
@@ -563,7 +563,7 @@ describe("AnthropicAdapter", () => {
           id: "msg_t",
           type: "message",
           role: "assistant",
-          model: "claude-3-5-sonnet",
+          model: "claude-sonnet-4-6",
           stop_reason: "max_tokens",
           stop_sequence: null,
           usage: { input_tokens: 120, output_tokens: 64 },
@@ -597,7 +597,7 @@ describe("AnthropicAdapter", () => {
           id: "msg_tp",
           type: "message",
           role: "assistant",
-          model: "claude-3-5-sonnet",
+          model: "claude-sonnet-4-6",
           stop_reason: "max_tokens",
           stop_sequence: null,
           usage: { input_tokens: 120, output_tokens: 64 },
@@ -632,7 +632,7 @@ describe("AnthropicAdapter", () => {
           id: "msg_ok",
           type: "message",
           role: "assistant",
-          model: "claude-3-5-sonnet",
+          model: "claude-sonnet-4-6",
           stop_reason: "max_tokens",
           stop_sequence: null,
           usage: { input_tokens: 120, output_tokens: 64 },
@@ -682,7 +682,7 @@ describe("AnthropicAdapter", () => {
       const cat = await adapter.catalog();
       assert.equal(fetches, 0);
       const ids = cat.map((m) => m.id);
-      assert.deepEqual(ids, ["claude-3-opus", "claude-3-5-sonnet", "claude-haiku-4-5"]);
+      assert.deepEqual(ids, ["claude-3-opus", "claude-sonnet-4-6", "claude-haiku-4-5"]);
       for (const m of cat) {
         assert.equal(m.estimate, true);
         assert.equal(m.family, "anthropic");
@@ -725,7 +725,7 @@ describe("AnthropicAdapter.catalog (live)", () => {
         return modelsPage([
           // dated snapshot ids → prefix-match the bare static ids
           { id: "claude-3-opus-20240229", display_name: "Claude 3 Opus", type: "model" },
-          { id: "claude-3-5-sonnet-20241022", display_name: "Claude 3.5 Sonnet", type: "model" },
+          { id: "claude-sonnet-4-6-20260219", display_name: "Claude Sonnet 4.6", type: "model" },
           // a brand-new model absent from the static table → honest unknown
           { id: "claude-flux-9-0-20260601", display_name: "Claude Flux 9.0", type: "model" },
         ]);
@@ -741,7 +741,7 @@ describe("AnthropicAdapter.catalog (live)", () => {
         // live ids appear (the field complaint: new snapshots never showed up)
         assert.deepEqual(
           cat.map((m) => m.id),
-          ["claude-3-opus-20240229", "claude-3-5-sonnet-20241022", "claude-flux-9-0-20260601"],
+          ["claude-3-opus-20240229", "claude-sonnet-4-6-20260219", "claude-flux-9-0-20260601"],
         );
         // opus snapshot inherited the static opus pricing + ctx by prefix
         assert.deepEqual(byId["claude-3-opus-20240229"].pricing, {
@@ -752,7 +752,7 @@ describe("AnthropicAdapter.catalog (live)", () => {
         assert.equal(byId["claude-3-opus-20240229"].name, "Claude 3 Opus");
         assert.equal(byId["claude-3-opus-20240229"].family, "anthropic");
         assert.equal(byId["claude-3-opus-20240229"].snapshot, "claude-3-opus-20240229");
-        assert.deepEqual(byId["claude-3-5-sonnet-20241022"].pricing, {
+        assert.deepEqual(byId["claude-sonnet-4-6-20260219"].pricing, {
           inUSDper1M: 3,
           outUSDper1M: 15,
         });
@@ -809,7 +809,7 @@ describe("AnthropicAdapter.catalog (live)", () => {
         const cat = await adapter.catalog();
         assert.deepEqual(
           cat.map((m) => m.id),
-          ["claude-3-opus", "claude-3-5-sonnet", "claude-haiku-4-5"],
+          ["claude-3-opus", "claude-sonnet-4-6", "claude-haiku-4-5"],
         );
         for (const m of cat) assert.equal(m.estimate, true);
       },
@@ -844,7 +844,7 @@ describe("OpenAIAdapter", () => {
           { role: "user", content: "Label: <unit>pay is bad</unit>" },
         ];
         const res = await adapter.complete({
-          model: "gpt-4-turbo",
+          model: "gpt-5.2",
           messages,
           schema: judgeSchema,
           temperature: 0,
@@ -875,7 +875,7 @@ describe("OpenAIAdapter", () => {
         body: {
           id: "chatcmpl-r",
           object: "chat.completion",
-          model: "gpt-4-turbo",
+          model: "gpt-5.2",
           choices: [
             {
               index: 0,
@@ -909,7 +909,7 @@ describe("OpenAIAdapter", () => {
         body: {
           id: "chatcmpl-t",
           object: "chat.completion",
-          model: "gpt-4-turbo",
+          model: "gpt-5.2",
           choices: [
             {
               index: 0,
@@ -1016,7 +1016,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
         assert.equal(call.url, "/v1/models");
         assert.equal(call.headers.authorization, "Bearer sk-oai-live");
         return modelsList([
-          "gpt-4-turbo", // exact static match
+          "gpt-5.2", // exact static match
           "gpt-5-mini-2026-05-01", // dated → prefix-match gpt-5-mini
           "gpt-6-preview", // chat, but no static entry → honest unknown
           "o4-mini", // o-series reasoning → chat-capable
@@ -1039,14 +1039,14 @@ describe("OpenAIAdapter.catalog (live)", () => {
         const ids = cat.map((m) => m.id);
         assert.deepEqual(
           ids,
-          ["gpt-4-turbo", "gpt-5-mini-2026-05-01", "gpt-6-preview", "o4-mini", "chatgpt-4o-latest"],
+          ["gpt-5.2", "gpt-5-mini-2026-05-01", "gpt-6-preview", "o4-mini", "chatgpt-4o-latest"],
           "only chat-capable families survive, in list order",
         );
 
         const byId = Object.fromEntries(cat.map((m) => [m.id, m]));
-        assert.deepEqual(byId["gpt-4-turbo"].pricing, { inUSDper1M: 10, outUSDper1M: 30 });
-        assert.equal(byId["gpt-4-turbo"].ctx, 128_000);
-        assert.equal(byId["gpt-4-turbo"].family, "openai");
+        assert.deepEqual(byId["gpt-5.2"].pricing, { inUSDper1M: 1.75, outUSDper1M: 14 });
+        assert.equal(byId["gpt-5.2"].ctx, 400_000);
+        assert.equal(byId["gpt-5.2"].family, "openai");
         // dated mini snapshot inherits mini pricing by prefix
         assert.deepEqual(byId["gpt-5-mini-2026-05-01"].pricing, {
           inUSDper1M: 0.25,
@@ -1063,7 +1063,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
           "o-series with no static row is an honest unknown",
         );
         // capability fields present for catalog-route consistency
-        assert.equal(byId["gpt-4-turbo"].structuredOutput, true);
+        assert.equal(byId["gpt-5.2"].structuredOutput, true);
       },
     );
   });
@@ -1074,7 +1074,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
       async (srv) => {
         const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
         const cat = await adapter.catalog();
-        // must pick the mini row (0.25/2), not the gpt-4-turbo row (10/30)
+        // must pick the mini row (0.25/2), not the gpt-5.2 row (1.75/14)
         assert.deepEqual(cat[0].pricing, { inUSDper1M: 0.25, outUSDper1M: 2 });
       },
     );
@@ -1088,7 +1088,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
         const cat = await adapter.catalog();
         assert.deepEqual(
           cat.map((m) => m.id),
-          ["gpt-4-turbo", "gpt-5-mini"],
+          ["gpt-5.2", "gpt-5-mini"],
         );
         for (const m of cat) assert.equal(m.estimate, true);
       },
@@ -1107,7 +1107,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
       assert.equal(fetches, 0, "keyless catalog must not hit the network");
       assert.deepEqual(
         cat.map((m) => m.id),
-        ["gpt-4-turbo", "gpt-5-mini"],
+        ["gpt-5.2", "gpt-5-mini"],
       );
     } finally {
       globalThis.fetch = realFetch;
@@ -1116,7 +1116,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
 
   it("caches the live fetch for 1h; force re-fetches", async () => {
     await withServer(
-      () => modelsList(["gpt-4-turbo"]),
+      () => modelsList(["gpt-5.2"]),
       async (srv) => {
         const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
         await adapter.catalog();
@@ -1274,7 +1274,7 @@ describe("OpenAI strict dialect on the wire", () => {
       async (srv) => {
         const adapter = new OpenAIAdapter({ apiKey: "k", baseUrl: srv.url });
         const req = {
-          model: "gpt-4-turbo",
+          model: "gpt-5.2",
           messages: [{ role: "user", content: "<unit>The pay is awful.</unit>" }],
           schema: extractionJudgeSchema,
           temperature: 0,
@@ -1405,7 +1405,7 @@ describe("OpenAI strict dialect on the wire", () => {
       async (srv) => {
         const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
         await adapter.complete({
-          model: "claude-3-5-sonnet",
+          model: "claude-sonnet-4-6",
           messages: [{ role: "user", content: "x" }],
           schema: extractionJudgeSchema,
           temperature: 0,
@@ -1467,10 +1467,10 @@ describe("OpenRouterAdapter", () => {
                 ],
               },
               {
-                id: "openai/gpt-4-turbo",
-                name: "GPT-4 Turbo",
-                context_length: 128000,
-                pricing: { prompt: "0.00001", completion: "0.00003" },
+                id: "openai/gpt-5.2",
+                name: "GPT-5.2",
+                context_length: 400000,
+                pricing: { prompt: "0.00000125", completion: "0.00001" },
                 supported_parameters: ["response_format", "temperature", "seed"],
               },
               {
@@ -1505,7 +1505,7 @@ describe("OpenRouterAdapter", () => {
           params: ["temperature", "top_p", "structured_outputs", "response_format"],
         });
         assert.equal(cat[1].family, "openai");
-        assert.equal(cat[1].pricing.inUSDper1M, 10);
+        assert.equal(cat[1].pricing.inUSDper1M, 1.25);
         assert.equal(
           cat[1].structuredOutput,
           true,
@@ -1536,10 +1536,10 @@ describe("OpenRouterAdapter", () => {
         body: {
           data: [
             {
-              id: "openai/gpt-4-turbo",
-              name: "GPT-4 Turbo",
-              context_length: 128000,
-              pricing: { prompt: "0.00001", completion: "0.00003" },
+              id: "openai/gpt-5.2",
+              name: "GPT-5.2",
+              context_length: 400000,
+              pricing: { prompt: "0.00000125", completion: "0.00001" },
               supported_parameters: ["response_format"],
             },
           ],
@@ -1553,7 +1553,7 @@ describe("OpenRouterAdapter", () => {
         // cached reads are independent copies (a pricing mutation must not leak)
         assert.deepEqual(a[0].pricing, b[0].pricing);
         a[0].pricing.inUSDper1M = 999;
-        assert.equal(b[0].pricing.inUSDper1M, 10, "cache must hand out fresh pricing objects");
+        assert.equal(b[0].pricing.inUSDper1M, 1.25, "cache must hand out fresh pricing objects");
         await adapter.catalog({ force: true });
         assert.equal(srv.calls.length, 2, "force bypasses the cache");
       },
@@ -1581,10 +1581,10 @@ describe("OpenRouterAdapter", () => {
               body: {
                 data: [
                   {
-                    id: "openai/gpt-4-turbo",
-                    name: "GPT-4 Turbo",
-                    context_length: 128000,
-                    pricing: { prompt: "0.00001", completion: "0.00003" },
+                    id: "openai/gpt-5.2",
+                    name: "GPT-5.2",
+                    context_length: 400000,
+                    pricing: { prompt: "0.00000125", completion: "0.00001" },
                     supported_parameters: ["response_format"],
                   },
                 ],
@@ -1593,14 +1593,14 @@ describe("OpenRouterAdapter", () => {
       async (srv) => {
         const adapter = new OpenRouterAdapter({ apiKey: "k", baseUrl: srv.url });
         const warm = await adapter.catalog();
-        assert.equal(warm[0].pricing.inUSDper1M, 10);
+        assert.equal(warm[0].pricing.inUSDper1M, 1.25);
         fail = true;
         // force past the TTL cache so the fetch is actually attempted and fails
         const cat = await adapter.catalog({ force: true });
         assert.ok(Array.isArray(cat));
         assert.equal(
           cat[0]?.pricing.inUSDper1M,
-          10,
+          1.25,
           "last-known pricing survives a later fetch failure",
         );
       },

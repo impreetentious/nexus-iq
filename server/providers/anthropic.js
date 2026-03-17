@@ -16,7 +16,7 @@ const CATALOG_PAGE_CAP = 20; // /v1/models pages are ≤1000 ids; this is a runa
 // Pricing is a static estimate (per 1M tokens) used for preflight cost math
 // when no live source exists; every entry is marked `estimate: true`.
 // Figures verified against platform.claude.com/docs pricing + model overview,
-// 2025-11 (Claude 3 Opus $15/$75 · 200K ctx; Claude 3.5 Sonnet $3/$15 · 200K ctx; Haiku 4.5
+// 2026-03 (Claude 3 Opus $15/$75 · 200K ctx; Sonnet 4.6 $3/$15 · 1M ctx; Haiku 4.5
 // $1/$5 · 200K ctx). Re-check on the next model launch — stale numbers here
 // feed BOTH preflight estimates and the live budget meter.
 //
@@ -25,7 +25,7 @@ const CATALOG_PAGE_CAP = 20; // /v1/models pages are ≤1000 ids; this is a runa
 // UI so a wizard can flag anything older than the staleness budget (see
 // routes/catalog.js `freshness.staleAfterDays`). Bump the date whenever
 // you re-verify these numbers.
-const PRICING_VERIFIED_AT = "2025-11-07";
+const PRICING_VERIFIED_AT = "2026-03-18";
 const STATIC_CATALOG = [
   {
     id: "claude-3-opus",
@@ -38,12 +38,12 @@ const STATIC_CATALOG = [
     pricingVerifiedAt: PRICING_VERIFIED_AT,
   },
   {
-    id: "claude-3-5-sonnet",
-    name: "Claude 3.5 Sonnet",
+    id: "claude-sonnet-4-6",
+    name: "Claude Sonnet 4.6",
     family: "anthropic",
-    ctx: 200_000,
+    ctx: 1_000_000,
     pricing: { inUSDper1M: 3, outUSDper1M: 15 },
-    snapshot: "claude-3-5-sonnet",
+    snapshot: "claude-sonnet-4-6",
     estimate: true,
     pricingVerifiedAt: PRICING_VERIFIED_AT,
   },

@@ -1286,7 +1286,7 @@ test("panels: recommends a family-disjoint panel from registry catalogs", async 
   mock.setHandler("t-panel", () => ({
     jurors: [
       { provider: "anthropic", model: "claude-haiku-4-5", workerClass: "mid" },
-      { provider: "anthropic", model: "claude-3-5-sonnet", workerClass: "mid" },
+      { provider: "anthropic", model: "claude-sonnet-4-6", workerClass: "mid" },
       { provider: "mock", model: "mock-1", workerClass: "small" },
     ],
     aggregation: "majority",
@@ -1372,7 +1372,7 @@ test("panels: juror budgets are compiler's CLASS_MAX_TOKENS (small ≥1024, mid 
   getAdapter(project, "ollama").adapter.catalog = async () => [];
   mock.setHandler("t-panel-budget", () => ({
     jurors: [
-      { provider: "anthropic", model: "claude-3-5-sonnet", workerClass: "frontier" },
+      { provider: "anthropic", model: "claude-sonnet-4-6", workerClass: "frontier" },
       { provider: "openai", model: "gpt-5-mini", workerClass: "mid" },
       { provider: "mock", model: "mock-1", workerClass: "small" },
     ],

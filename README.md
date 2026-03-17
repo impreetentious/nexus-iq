@@ -61,7 +61,7 @@ Name detection is a capitalized-bigram heuristic with a stoplist, not a trained 
 
 ## Quick Start
 
-Requires Node.js `>=20.10` and npm.
+Requires Node.js `>=20.19` and npm.
 
 ```bash
 npm ci
@@ -191,4 +191,4 @@ MIT © Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v2.7.2
+**Version:** v2.7.3
