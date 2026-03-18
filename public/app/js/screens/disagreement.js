@@ -23,11 +23,11 @@ export function render(mount, params) {
   asyncMount(
     mount,
     async () => {
-      const project = await ensureProject(params.slug);
+      await ensureProject(params.slug);
       const data = await api.runs.disagreement(params.slug, params.rid);
-      return { project, data };
+      return { data };
     },
-    ({ project, data }) => {
+    ({ data }) => {
       mount.append(
         screenHead({
           overline: `Run · ${params.rid}`,

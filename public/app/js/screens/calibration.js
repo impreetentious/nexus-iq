@@ -30,7 +30,6 @@ import {
   emptyState,
   openSheet,
   setFullbleed,
-  markedValue,
   goldsetDisplayName,
 } from "./_shared.js";
 

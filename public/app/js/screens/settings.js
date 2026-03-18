@@ -17,7 +17,6 @@ import {
   ensureProject,
   openSheet,
   emptyState,
-  buttonBusy,
 } from "./_shared.js";
 
 export const route = "settings";
@@ -52,6 +51,87 @@ function privacyBlocks(mode, provider) {
     return `no-training mode blocks ${provider} (no contractual no-training terms). Switch the project to open, or use anthropic/openai/local.`;
   }
   return null;
+}
+
+function freshnessBanner(freshness, catalog) {
+  const cachedAt = freshness?.cachedAt ? new Date(freshness.cachedAt) : null;
+  const modelCount = Object.values(catalog ?? {}).reduce((sum, models) => sum + models.length, 0);
+  const label =
+    cachedAt && Number.isFinite(cachedAt.getTime())
+      ? cachedAt.toISOString().slice(0, 10)
+      : "unknown";
+  return el(
+    "p",
+    { class: "screen__hint" },
+    `${modelCount} models · catalog verified ${label} · policy ${freshness?.policy ?? "unknown"}`,
+  );
+}
+
+function catalogTable(catalog) {
+  const rows = Object.entries(catalog ?? {}).flatMap(([provider, models]) =>
+    (models ?? []).slice(0, 12).map((model) => ({ provider, model })),
+  );
+  if (!rows.length) {
+    return emptyState({
+      title: "No catalog entries.",
+      body: "Configure a provider or refresh the server catalog.",
+    });
+  }
+  return el(
+    "table",
+    { class: "table table--compact" },
+    el(
+      "thead",
+      {},
+      el("tr", {}, el("th", {}, "Provider"), el("th", {}, "Model"), el("th", {}, "Capabilities")),
+    ),
+    el(
+      "tbody",
+      {},
+      ...rows.map(({ provider, model }) =>
+        el(
+          "tr",
+          {},
+          el("td", {}, provider),
+          el("td", {}, model.name ?? model.id),
+          el(
+            "td",
+            {},
+            model.structuredOutput ? "structured" : "repair",
+            model.noTemperature ? " · no temp" : "",
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+function openProviderWizard({ settings, health, catalog }) {
+  const sheet = openSheet({ title: "Provider setup wizard", overline: "Local config" });
+  const providers = [
+    ...new Set([
+      ...Object.keys(health?.providers ?? {}),
+      ...Object.keys(settings?.keys ?? {}),
+      ...Object.keys(catalog ?? {}),
+    ]),
+  ];
+  sheet.body.append(
+    el(
+      "div",
+      { class: "stack" },
+      ...providers.map((provider) =>
+        el(
+          "p",
+          { class: "screen__hint" },
+          el("strong", {}, provider),
+          ` · ${settings?.keys?.[provider]?.configured ? "key saved" : "no key saved"} · ${
+            health?.providers?.[provider] ? "reachable" : "not reachable"
+          }`,
+        ),
+      ),
+    ),
+  );
+  sheet.foot.append(el("button", { class: "btn", type: "button", onclick: sheet.close }, "Done"));
 }
 
 export function render(mount, params) {
