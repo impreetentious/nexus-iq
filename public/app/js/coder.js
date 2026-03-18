@@ -38,7 +38,7 @@ async function call(method, path, body) {
         : { method },
     );
   } catch (err) {
-    throw new Error(`the server did not answer (${err.message})`);
+    throw new Error(`the server did not answer (${err.message})`, { cause: err });
   }
   let envelope = null;
   try {

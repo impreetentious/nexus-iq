@@ -191,4 +191,4 @@ MIT © Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v2.7.3
+**Version:** v2.7.4

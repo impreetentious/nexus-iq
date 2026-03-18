@@ -651,8 +651,9 @@ function patch() {
   // live SSE: iteration events {iteration, versionHash, agreement, kappa,
   // alpha, note, costUSD} then done {instrumentId, level, versionHash,
   // stability, curve, cost}
-  apiNs.instruments.silverTune = (p, id, opts = {}, handlers = {}) =>
-    replaySse(
+  apiNs.instruments.silverTune = (p, id, opts = {}, handlers = {}) => {
+    void opts;
+    return replaySse(
       db.instruments.silverTune.iterations.map((it) => ({ event: "iteration", data: clone(it) })),
       {
         gap: 900,
@@ -674,6 +675,7 @@ function patch() {
         },
       },
     );
+  };
   // live: → {alpha, pass, level} (k/n persist onto instrument.stability;
   // level = the instrument's level AFTER the check, so the screen never
   // claims a promotion that did not happen)
