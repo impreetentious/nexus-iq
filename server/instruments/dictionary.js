@@ -459,7 +459,7 @@ export function parseDic(text) {
   if (typeof text !== "string") {
     throw new NexusIQError("DICTIONARY_PARSE", ".dic input must be a string");
   }
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
+  const lines = text.replace(/^\ufeff/, "").split(/\r?\n/);
   let i = 0;
   while (i < lines.length && lines[i].trim() === "") i++;
   if (i >= lines.length || lines[i].trim() !== "%") {
@@ -618,7 +618,7 @@ export function importTsvLexicon(text, { termCol, categoryCol, valueCol } = {}) 
   if (!Number.isInteger(termCol) || !Number.isInteger(categoryCol)) {
     throw new NexusIQError("DICTIONARY_PARSE", "termCol and categoryCol are required (0-based)");
   }
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
+  const lines = text.replace(/^\ufeff/, "").split(/\r?\n/);
   const catIndex = new Map();
   const categories = [];
   const need = Math.max(termCol, categoryCol, valueCol ?? 0);

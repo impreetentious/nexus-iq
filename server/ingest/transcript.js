@@ -179,7 +179,7 @@ export async function parse(filePath, { maxMergeGapSeconds } = {}) {
   const ext = extname(filePath).toLowerCase();
   const issues = [];
   let cues;
-  if (ext === ".vtt" || /^﻿?WEBVTT/.test(raw)) cues = parseVTT(raw, issues);
+  if (ext === ".vtt" || /^\ufeff?WEBVTT/.test(raw)) cues = parseVTT(raw, issues);
   else if (ext === ".srt") cues = parseSRT(raw, issues);
   else if (ext === ".json" || raw.trimStart().startsWith("{") || raw.trimStart().startsWith("["))
     cues = parseZoomJSON(raw, issues);
