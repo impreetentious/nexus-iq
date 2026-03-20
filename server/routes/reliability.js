@@ -302,7 +302,11 @@ export default [
       return {
         constructId: construct.id,
         corpusId,
-        sources: sources.map(({ labels, ...s }) => s),
+        sources: sources.map((source) => {
+          const clean = { ...source };
+          delete clean.labels;
+          return clean;
+        }),
         pairs,
         notes,
         retestAvailable,
