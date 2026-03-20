@@ -35,7 +35,7 @@ import {
   installProcessGuards,
 } from "../../server/index.js";
 import { getAdapter } from "../../server/providers/registry.js";
-import { appendNdjson, updateProject } from "../../server/core/store.js";
+import { appendNdjson } from "../../server/core/store.js";
 import { generateBrief } from "../../server/director/brief.js";
 import { aggregate } from "../../server/instruments/panel.js";
 import * as methods from "../../server/reporting/methods.js";
@@ -54,7 +54,6 @@ import { NexusIQError } from "../../server/core/errors.js";
 let tmpProjects;
 let tmpConfig;
 let srv;
-let base;
 
 // the Director handler counts calls so the abort test can assert "0 calls
 // when the signal is already aborted, ≥1 otherwise"
@@ -78,7 +77,6 @@ before(async () => {
   process.env.NEXUS_IQ_PROJECTS_DIR = tmpProjects;
   process.env.NEXUS_IQ_CONFIG_DIR = tmpConfig;
   srv = await startServer({ port: 0 });
-  base = `http://127.0.0.1:${srv.port}`;
   // network-backed catalogs must not leave the machine during tests
   for (const name of ["openrouter", "ollama"]) {
     const { adapter } = getAdapter({ privacyMode: "open" }, name);

@@ -49,7 +49,6 @@ test("ols: HC1 sandwich SE matches hand formula on a tiny case", () => {
   // = (1/n²)Σe² · n/(n−1) = Σe²/(n(n−1)) — the classic sample-mean variance.
   const y = [1, 2, 3, 6];
   const n = 4;
-  const ybar = 3;
   const sumE2 = (1 - 3) ** 2 + (2 - 3) ** 2 + 0 + (6 - 3) ** 2; // 4+1+0+9 = 14
   const want = Math.sqrt(sumE2 / (n * (n - 1)));
   const fit = ols(y, [[], [], [], []]);

@@ -1,6 +1,6 @@
 {
   "name": "nexus-iq",
-  "version": "2.7.7",
+  "version": "2.7.8",
   "description": "Local-first qualitative text measurement platform.",
   "type": "module",
   "license": "MIT",
@@ -47,7 +47,7 @@
   "overrides": {
     "brace-expansion": "~5.0.4",
     "next": {
-      "postcss": "^8.5.6",
+      "postcss": "^8.5.8",
       "sharp": "^0.34.5"
     }
   },

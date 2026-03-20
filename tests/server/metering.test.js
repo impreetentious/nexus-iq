@@ -627,7 +627,7 @@ test("concurrent starts reserve distinct project headroom atomically and settlem
 
 test("completed-run analyst suggestions are on-demand, evidence-filtered, and require explicit materialization", async (t) => {
   const slug = "meter-analyst-route";
-  const project = await setup(slug, { units: makeUnits(8), instruments: [judgeInstrument()] });
+  await setup(slug, { units: makeUnits(8), instruments: [judgeInstrument()] });
   await updateProject(slug, (p) => {
     p.director = {
       provider: "mock",

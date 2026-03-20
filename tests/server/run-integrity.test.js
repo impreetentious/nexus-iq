@@ -33,10 +33,8 @@ import os from "node:os";
 import path from "node:path";
 
 import * as engineMod from "../../server/runs/engine.js";
-import * as monitor from "../../server/runs/monitor.js";
 import runsRoutes from "../../server/routes/runs.js";
 import analysesRoutes from "../../server/routes/analyses.js";
-import evidenceRoutes from "../../server/routes/evidence.js";
 import {
   outputSchemaFor,
   jsonSchemaFor,
@@ -51,7 +49,6 @@ import {
   createInstrument,
   createGoldSet,
   versionInstrument,
-  instrumentVersionHash,
 } from "../../server/core/objects.js";
 import {
   saveProject,

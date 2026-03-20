@@ -42,7 +42,6 @@ import {
   readNdjson,
   projectDir,
 } from "../../server/core/store.js";
-import { NexusIQError } from "../../server/core/errors.js";
 import { getAdapter } from "../../server/providers/registry.js";
 
 // ---------------------------------------------------------------- harness

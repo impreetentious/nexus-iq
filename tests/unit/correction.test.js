@@ -10,7 +10,7 @@ import {
   dslLogit,
   ppiMean,
 } from "../../server/stats/correction.js";
-import { ols, logit } from "../../server/stats/models.js";
+import { logit } from "../../server/stats/models.js";
 import { normQuantile } from "../../server/stats/distributions.js";
 import { mulberry32 } from "../../server/core/rng.js";
 import { NexusIQError } from "../../server/core/errors.js";

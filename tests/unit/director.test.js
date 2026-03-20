@@ -28,7 +28,6 @@ import { saveProject, loadProject, updateProject, projectDir } from "../../serve
 import * as ledger from "../../server/core/ledger.js";
 import { newId, unitId } from "../../server/core/ids.js";
 import { getAdapter } from "../../server/providers/registry.js";
-import { validateSchema } from "../../server/providers/base.js";
 import { compile as compileDictionary } from "../../server/instruments/dictionary.js";
 
 import { callDirector, directorCosts } from "../../server/director/director.js";

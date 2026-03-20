@@ -38,7 +38,7 @@ function startServer(handler) {
     req.on("data", (c) => chunks.push(c));
     req.on("end", () => {
       const raw = Buffer.concat(chunks).toString("utf8");
-      let body = null;
+      let body;
       try {
         body = raw ? JSON.parse(raw) : null;
       } catch {
