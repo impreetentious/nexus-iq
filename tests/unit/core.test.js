@@ -668,6 +668,20 @@ test("server: sse helper sets headers and frames events", async (t) => {
   );
 });
 
+test("server: an error after SSE headers emits an error event before closing", async (t) => {
+  const srv = await startTestServer(t);
+  srv.router.addRoute("GET", "/api/stream-error", async (req, res) => {
+    sse(res);
+    throw new NexusIQError("STREAM_FAILED", "stream work failed");
+  });
+  const r = await fetch(`${srv.url}/api/stream-error`);
+  assert.equal(r.status, 200);
+  assert.equal(
+    await r.text(),
+    'event: error\ndata: {"code":"STREAM_FAILED","message":"stream work failed"}\n\n',
+  );
+});
+
 test("server: static serving with mime map, 503 UI-not-built, traversal guard", async (t) => {
   const appDir = await tmpdir(t);
   await writeFile(path.join(appDir, "style.css"), "body{color:#1A1815}", "utf8");
@@ -687,6 +701,8 @@ test("server: static serving with mime map, 503 UI-not-built, traversal guard", 
   const css = await fetch(`${srv.url}/style.css`);
   assert.equal(css.status, 200);
   assert.match(css.headers.get("content-type"), /^text\/css/);
+  assert.equal(css.headers.get("x-content-type-options"), "nosniff");
+  assert.match(css.headers.get("content-security-policy"), /frame-ancestors 'self'/);
   assert.equal(await css.text(), "body{color:#1A1815}");
 
   const json = await fetch(`${srv.url}/tokens.json`);

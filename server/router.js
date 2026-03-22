@@ -8,6 +8,27 @@ import busboy from "busboy";
 import { NexusIQError } from "./core/errors.js";
 
 const DEFAULT_MAX_JSON_BODY = 50 * 1024 * 1024;
+// A Symbol.for key lets the router identify an SSE response without coupling
+// route handlers to its error plumbing. It is intentionally not a string
+// property that application code could accidentally overwrite.
+const SSE_CONNECTION = Symbol.for("nexus-iq.sse.connection");
+const STATIC_SECURITY_HEADERS = {
+  "content-security-policy": [
+    "default-src 'self'",
+    "script-src 'self' 'sha256-tV4f2rkRnIiqe4ll6CI3Y6ndYA2usdqlyQjVsaNnCxM='",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'self'",
+  ].join("; "),
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "SAMEORIGIN",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=(), browsing-topics=()",
+};
 
 export const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -63,7 +84,17 @@ export function sse(res) {
     conn.closed = true;
     for (const fn of closeHandlers.splice(0)) fn();
   });
+  res[SSE_CONNECTION] = conn;
   return conn;
+}
+
+// Keep streamed error payloads as deliberately small as the JSON envelope's
+// public error shape. Unknown errors stay in the server log; their messages
+// may contain implementation details that must not cross the wire.
+export function errorForClient(err) {
+  if (err instanceof NexusIQError) return { code: err.code, message: err.message };
+  console.error(err);
+  return { code: "INTERNAL", message: "Internal error" };
 }
 
 // A browser Origin is local when its host is loopback — any port, any scheme.
@@ -241,25 +272,27 @@ export function createRouter({ appDir, maxJsonBody = DEFAULT_MAX_JSON_BODY, fsIm
 
   function sendError(res, err) {
     if (res.destroyed) return; // client is gone — nowhere to send anything
+    const error = errorForClient(err);
     if (res.headersSent) {
-      // already streaming (SSE/static) — nothing sensible to send
+      const conn = res[SSE_CONNECTION];
+      if (conn) {
+        conn.send("error", error);
+        conn.close();
+        return;
+      }
+      // A static response can already have committed headers too; an SSE
+      // connection, unlike a file stream, has an event-shaped error channel.
       res.end();
       return;
     }
     if (err instanceof NexusIQError) {
       const status = err.status ?? ERROR_STATUS[err.code] ?? 400;
-      const error = { code: err.code, message: err.message };
       // details ride the envelope when present, so confirmation errors can
       // state exactly what exists (e.g. CONFIRM_REQUIRED's committed-work counts)
       if (err.details && Object.keys(err.details).length > 0) error.details = err.details;
       sendJson(res, status, { ok: false, error });
     } else {
-      // Full error (incl. stack) goes to the server log only. The client only
-      // ever sees a fixed, generic message — err.message can carry internal
-      // paths, object shapes, or other implementation detail that shouldn't
-      // cross the wire for an error class we didn't anticipate.
-      console.error(err);
-      sendJson(res, 500, { ok: false, error: { code: "INTERNAL", message: "Internal error" } });
+      sendJson(res, 500, { ok: false, error });
     }
   }
 
@@ -286,6 +319,7 @@ export function createRouter({ appDir, maxJsonBody = DEFAULT_MAX_JSON_BODY, fsIm
     }
     if (!info.isFile()) return sendText(res, 404, "Not found");
     res.writeHead(200, {
+      ...STATIC_SECURITY_HEADERS,
       "content-type": MIME[path.extname(file).toLowerCase()] || "application/octet-stream",
       "content-length": info.size,
     });

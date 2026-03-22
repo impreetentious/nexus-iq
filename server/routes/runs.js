@@ -9,7 +9,7 @@
 // and settles. The route answers only after the run's promise settles, so
 // the status it reports is the status on disk.
 import { NexusIQError } from "../core/errors.js";
-import { sse } from "../router.js";
+import { errorForClient, sse } from "../router.js";
 import { loadProject, updateProject } from "../core/store.js";
 import * as ledger from "../core/ledger.js";
 import { getAdapter } from "../providers/registry.js";
@@ -527,86 +527,91 @@ export default [
       const project = await loadProject(params.p);
       const run = findOr404(project.runs, params.r, "run");
       const conn = sse(res);
-      const st = live.get(params.r);
+      try {
+        const st = live.get(params.r);
 
-      const tickFromRun = (r) => ({
-        done: r.checkpoint?.done ?? 0,
-        total: r.checkpoint?.total ?? 0,
-        costUSD: r.cost?.actualUSD ?? 0,
-        // the engine persists labelDist at checkpoints and completion — a
-        // cold tick reports the stored distribution, not an empty one
-        labelDist: r.labelDist ?? {},
-        warnings: [],
-        escalations: r.escalation?.count ?? 0,
-      });
-      const doneOf = (r, status) => ({
-        runId: params.r,
-        status: status ?? r?.status ?? "unknown",
-        checkpoint: r?.checkpoint ?? null,
-        cost: r?.cost ?? null,
-        quarantine: r?.quarantine ?? [],
-        escalations: r?.escalation?.count ?? 0,
-      });
-
-      // st.promise is null only in the sub-tick window where launchRun has
-      // synchronously claimed the slot but not yet attached the execution
-      // promise (claim-then-validate); treat that as not-yet-live and fall
-      // through to the persisted-state path rather than dereferencing null.
-      if (st && st.promise && !st.terminal) {
-        conn.send("tick", st.last ?? monitor.runState(params.r) ?? tickFromRun(run));
-        const sub = {
-          tick: (s) => conn.send("tick", s),
-          done: (outcome) => {
-            conn.send("done", doneOf(outcome.run, outcome.status));
-            conn.close();
-          },
-        };
-        st.subs.add(sub);
-        conn.onClose(() => st.subs.delete(sub));
-        // settle race: if the run terminated between the check above and the
-        // subscription, deliver done from the settled promise instead of
-        // waiting on a notification that already fired
-        st.promise
-          .then((outcome) => {
-            if (st.subs.has(sub)) {
-              st.subs.delete(sub);
-              sub.done(outcome);
-            }
-          })
-          .catch(() => {});
-        return;
-      }
-      if (st?.terminal) {
-        conn.send("tick", st.last ?? tickFromRun(st.terminal.run ?? run));
-        conn.send("done", doneOf(st.terminal.run ?? run, st.terminal.status));
-        conn.close();
-        return;
-      }
-      // Not executing in this process: report the persisted state. A record
-      // still saying "running" here is an ORPHAN — the process that ran it is
-      // gone (restart/crash mid-run). Heal it to paused (resume is exactly-
-      // once off the outputs on disk) BEFORE answering; replaying "running"
-      // for a run nothing is running once looped the client into a re-render
-      // flicker.
-      let settled = run;
-      if (run.status === "running") {
-        const fresh = await updateProject(params.p, (p) => {
-          const r = (p.runs ?? []).find((x) => x.id === params.r);
-          if (r && r.status === "running") {
-            r.status = "paused";
-            r.error = {
-              code: "ORPHANED",
-              message:
-                "the server stopped while this run was executing; resume continues from the checkpoint",
-            };
-          }
+        const tickFromRun = (r) => ({
+          done: r.checkpoint?.done ?? 0,
+          total: r.checkpoint?.total ?? 0,
+          costUSD: r.cost?.actualUSD ?? 0,
+          // the engine persists labelDist at checkpoints and completion — a
+          // cold tick reports the stored distribution, not an empty one
+          labelDist: r.labelDist ?? {},
+          warnings: [],
+          escalations: r.escalation?.count ?? 0,
         });
-        settled = (fresh.runs ?? []).find((x) => x.id === params.r) ?? run;
-        await snapshotRun(params.p, params.r);
+        const doneOf = (r, status) => ({
+          runId: params.r,
+          status: status ?? r?.status ?? "unknown",
+          checkpoint: r?.checkpoint ?? null,
+          cost: r?.cost ?? null,
+          quarantine: r?.quarantine ?? [],
+          escalations: r?.escalation?.count ?? 0,
+        });
+
+        // st.promise is null only in the sub-tick window where launchRun has
+        // synchronously claimed the slot but not yet attached the execution
+        // promise (claim-then-validate); treat that as not-yet-live and fall
+        // through to the persisted-state path rather than dereferencing null.
+        if (st && st.promise && !st.terminal) {
+          conn.send("tick", st.last ?? monitor.runState(params.r) ?? tickFromRun(run));
+          const sub = {
+            tick: (s) => conn.send("tick", s),
+            done: (outcome) => {
+              conn.send("done", doneOf(outcome.run, outcome.status));
+              conn.close();
+            },
+          };
+          st.subs.add(sub);
+          conn.onClose(() => st.subs.delete(sub));
+          // settle race: if the run terminated between the check above and the
+          // subscription, deliver done from the settled promise instead of
+          // waiting on a notification that already fired
+          st.promise
+            .then((outcome) => {
+              if (st.subs.has(sub)) {
+                st.subs.delete(sub);
+                sub.done(outcome);
+              }
+            })
+            .catch(() => {});
+          return;
+        }
+        if (st?.terminal) {
+          conn.send("tick", st.last ?? tickFromRun(st.terminal.run ?? run));
+          conn.send("done", doneOf(st.terminal.run ?? run, st.terminal.status));
+          conn.close();
+          return;
+        }
+        // Not executing in this process: report the persisted state. A record
+        // still saying "running" here is an ORPHAN — the process that ran it is
+        // gone (restart/crash mid-run). Heal it to paused (resume is exactly-
+        // once off the outputs on disk) BEFORE answering; replaying "running"
+        // for a run nothing is running once looped the client into a re-render
+        // flicker.
+        let settled = run;
+        if (run.status === "running") {
+          const fresh = await updateProject(params.p, (p) => {
+            const r = (p.runs ?? []).find((x) => x.id === params.r);
+            if (r && r.status === "running") {
+              r.status = "paused";
+              r.error = {
+                code: "ORPHANED",
+                message:
+                  "the server stopped while this run was executing; resume continues from the checkpoint",
+              };
+            }
+          });
+          settled = (fresh.runs ?? []).find((x) => x.id === params.r) ?? run;
+          await snapshotRun(params.p, params.r);
+        }
+        conn.send("tick", monitor.runState(params.r) ?? tickFromRun(settled));
+        conn.send("done", doneOf(settled));
+        conn.close();
+      } catch (err) {
+        conn.send("error", errorForClient(err));
+        conn.close();
       }
-      conn.send("tick", monitor.runState(params.r) ?? tickFromRun(settled));
-      conn.send("done", doneOf(settled));
-      conn.close();
     },
   },
   {

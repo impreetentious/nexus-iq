@@ -3,7 +3,7 @@
 //   GET /api/projects/:p/diagnostics/support-bundle — ZIP, MANIFEST, redaction
 //
 // The redaction contract under test: with a real-looking provider key planted
-// in config/keys.json and a vault file planted under projects/<slug>/vault/,
+// in config/keys.json and a vault file planted under vaults/<slug>/,
 // neither the key string nor the vault contents may appear in ANY member of
 // the ZIP, and no member may live under vault/, .imports/, or be named
 // keys.json. MANIFEST.json must carry bundleFormat: 1 and a per-member
@@ -21,13 +21,15 @@ import { unzipSync, strFromU8 } from "fflate";
 
 import { startServer } from "../../server/index.js";
 
-let tmpProjects, tmpConfig, srv, base;
+let tmpProjects, tmpConfig, tmpVaults, srv, base;
 
 before(async () => {
   tmpProjects = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-diag-"));
   tmpConfig = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-diag-cfg-"));
+  tmpVaults = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-diag-vaults-"));
   process.env.NEXUS_IQ_PROJECTS_DIR = tmpProjects;
   process.env.NEXUS_IQ_CONFIG_DIR = tmpConfig;
+  process.env.NEXUS_IQ_VAULTS_DIR = tmpVaults;
   srv = await startServer({ port: 0 });
   base = `http://127.0.0.1:${srv.port}`;
 });
@@ -36,8 +38,10 @@ after(async () => {
   await srv?.close?.();
   delete process.env.NEXUS_IQ_PROJECTS_DIR;
   delete process.env.NEXUS_IQ_CONFIG_DIR;
+  delete process.env.NEXUS_IQ_VAULTS_DIR;
   await rm(tmpProjects, { recursive: true, force: true }).catch(() => {});
   await rm(tmpConfig, { recursive: true, force: true }).catch(() => {});
+  await rm(tmpVaults, { recursive: true, force: true }).catch(() => {});
 });
 
 async function call(method, p, body) {
@@ -101,9 +105,9 @@ test("support bundle: MANIFEST + members present, redaction holds against a plan
     "utf8",
   );
 
-  // 3. plant a vault file under projects/<slug>/vault/ — this path family is
-  //    the same one the replication archive already refuses to include
-  const vaultDir = path.join(tmpProjects, slug, "vault");
+  // 3. plant a vault outside the portable project bundle. The support-bundle
+  //    writer must never read it.
+  const vaultDir = path.join(tmpVaults, slug);
   await mkdir(vaultDir, { recursive: true });
   await writeFile(
     path.join(vaultDir, "cx_probe.json"),

@@ -70,6 +70,7 @@ import {
   readNdjson,
   projectsDir,
   projectDir,
+  assertStorageId,
 } from "../core/store.js";
 import * as ledger from "../core/ledger.js";
 import * as cache from "../core/cache.js";
@@ -210,7 +211,7 @@ export function parseUnitFilter(filterStr) {
 }
 
 async function loadUnits(pdir, corpusId, unitFilter) {
-  const file = path.join(pdir, "corpora", corpusId, "units.ndjson");
+  const file = path.join(pdir, "corpora", assertStorageId(corpusId, "corpus"), "units.ndjson");
   const filter = parseUnitFilter(unitFilter);
   return readNdjson(file, filter ? { filter } : {});
 }
