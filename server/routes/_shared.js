@@ -12,17 +12,16 @@
 //   - agreement reports pass the construct's declared category order into
 //     order-sensitive statistics (ordinal α / weighted κ / AC2).
 import path from "node:path";
-import { mkdir, open, rm, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { NexusIQError } from "../core/errors.js";
 import {
-  renameWithRetry,
   loadProject,
   updateProject,
   readNdjson,
   projectDir,
   projectsDir,
-  DIR_MODE,
-  FILE_MODE,
+  vaultsDir,
+  writeFileAtomic,
 } from "../core/store.js";
 import { directorCosts } from "../director/director.js";
 import {
@@ -159,48 +158,44 @@ export function pdirOf(slug) {
   return projectDir(safeId(slug, "project"), projectsDir());
 }
 
+/** Build a re-identification-vault path outside portable project bundles. */
+export function vaultFile(slug, corpusId) {
+  const base = path.resolve(vaultsDir());
+  const safeSlug = safeId(slug, "project");
+  const safeCorpusId = safeId(corpusId, "corpus id");
+  const file = path.resolve(base, safeSlug, `${safeCorpusId}.json`);
+  if (!file.startsWith(`${base}${path.sep}`)) {
+    throw new NexusIQError("VALIDATION", "vault path must remain outside project bundles", {
+      slug,
+      corpusId,
+    });
+  }
+  return file;
+}
+
+/** Build an artifact path only after proving it remains inside its project bundle. */
+function bundleFile(slug, ...segments) {
+  const base = path.resolve(pdirOf(slug));
+  const file = path.resolve(base, ...segments);
+  if (!file.startsWith(`${base}${path.sep}`)) {
+    throw new NexusIQError("VALIDATION", "artifact path must remain inside the project bundle", {
+      slug,
+      segments,
+    });
+  }
+  return file;
+}
+
 // ----------------------------------------------------------------- fs bits
 
-let tmpSeq = 0;
-
-// Atomic JSON write (tmp + fsync + rename) — same recipe as core/store, kept
-// local so routes do not reach into store internals.
 export async function writeJsonAtomic(file, obj) {
-  await mkdir(path.dirname(file), { recursive: true, mode: DIR_MODE });
-  const tmp = `${file}.${process.pid}.${tmpSeq++}.tmp`;
-  const fh = await open(tmp, "w", FILE_MODE);
-  try {
-    await fh.writeFile(JSON.stringify(obj, null, 2), "utf8");
-    await fh.sync();
-  } finally {
-    await fh.close();
-  }
-  try {
-    await renameWithRetry(tmp, file);
-  } catch (err) {
-    await rm(tmp, { force: true }).catch(() => {});
-    throw err;
-  }
+  await writeFileAtomic(file, obj, { json: true });
   return file;
 }
 
 // Atomic text write for whole-file artifacts (units.ndjson at import time).
 export async function writeTextAtomic(file, text) {
-  await mkdir(path.dirname(file), { recursive: true, mode: DIR_MODE });
-  const tmp = `${file}.${process.pid}.${tmpSeq++}.tmp`;
-  const fh = await open(tmp, "w", FILE_MODE);
-  try {
-    await fh.writeFile(text, "utf8");
-    await fh.sync();
-  } finally {
-    await fh.close();
-  }
-  try {
-    await renameWithRetry(tmp, file);
-  } catch (err) {
-    await rm(tmp, { force: true }).catch(() => {});
-    throw err;
-  }
+  await writeFileAtomic(file, text);
 }
 
 export async function readJsonFile(file) {
@@ -218,7 +213,7 @@ export async function readJsonFile(file) {
 // ----------------------------------------------------------------- corpora
 
 export function corpusUnitsFile(slug, corpusId) {
-  return path.join(pdirOf(slug), "corpora", corpusId, "units.ndjson");
+  return bundleFile(slug, "corpora", safeId(corpusId, "corpus"), "units.ndjson");
 }
 
 export async function readCorpusUnits(slug, corpusId, opts = {}) {
@@ -263,7 +258,7 @@ export async function unitsById(project, ids, { corpusId } = {}) {
 // --------------------------------------------------------------- gold sets
 
 export function goldsetFile(slug, goldsetId) {
-  return path.join(pdirOf(slug), "gold", `${safeId(goldsetId, "goldset")}.json`);
+  return bundleFile(slug, "gold", `${safeId(goldsetId, "goldset")}.json`);
 }
 
 export async function readGoldset(slug, goldsetId) {
@@ -413,7 +408,7 @@ export async function withDirectorSpend(project, fn) {
 // ----------------------------------------------------------------- outputs
 
 export function runOutputsFile(slug, runId) {
-  return path.join(pdirOf(slug), "runs", safeId(runId, "run"), "outputs.ndjson");
+  return bundleFile(slug, "runs", safeId(runId, "run"), "outputs.ndjson");
 }
 
 export function finalJurorOf(instrument) {

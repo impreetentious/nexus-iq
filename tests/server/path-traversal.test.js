@@ -11,6 +11,7 @@ import { mkdtemp, mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { startServer } from "../../server/index.js";
+import { corpusUnitsFile } from "../../server/routes/_shared.js";
 
 let tmpRoot, tmpProjects, tmpConfig, srv, base, slug;
 const SECRET = "sk-or-v1-PLANTED-SECRET-DO-NOT-LEAK";
@@ -68,6 +69,19 @@ test("GET analyses/:id — traversal id cannot read the key file", async () => {
     assert.ok(status === 400 || status === 404, `escape ${id} → ${status}, want 400/404`);
     assert.ok(!text.includes(SECRET), `escape ${id} LEAKED the secret`);
   }
+});
+
+test("corpus path builder and units endpoint reject a traversal corpus id", async () => {
+  assert.throws(
+    () => corpusUnitsFile(slug, "../../config"),
+    /invalid corpus/,
+    "the filesystem builder must be the final validation seam",
+  );
+  const { status, text } = await bodyOf(
+    await fetch(`${base}/api/projects/${slug}/corpora/..%2F..%2Fconfig/units`),
+  );
+  assert.ok(status === 400 || status === 404, `corpus escape → ${status}, want 400/404`);
+  assert.ok(!text.includes(SECRET), "corpus escape LEAKED the secret");
 });
 
 test("GET briefs/:bid — traversal id cannot read the key file", async () => {

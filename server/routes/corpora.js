@@ -4,7 +4,6 @@
 // metadata marginals). Instant Read computes on demand and caches into the
 // corpus meta; it never touches a model.
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { NexusIQError } from "../core/errors.js";
 import { newId, unitId } from "../core/ids.js";
 import { loadProject, updateProject } from "../core/store.js";
@@ -26,6 +25,7 @@ import {
   corpusUnitsFile,
   readJsonFile,
   writeJsonAtomic,
+  vaultFile,
 } from "./_shared.js";
 
 // ------------------------------------------------------------------- scope
@@ -556,16 +556,15 @@ export default [
         const { counts } = piiScan(next); // mutates unit.flags.pii in place
         pii = { mode: "scan", counts };
       } else if (piiMode === "pseudonymize") {
-        // The derived corpus gets its OWN vault at vault/<corpusId>.json,
+        // The derived corpus gets its OWN vault at vaults/<slug>/<corpusId>.json,
         // seeded with the parent's map: tokens already in the promoted text
         // stay protected no-ops, numbering continues past them, and the
         // derived corpus re-identifies without reaching back to the parent.
         // The parent vault is read, never written. A missing parent vault is
         // NOT seeded — pseudonymize then refuses the orphaned tokens
         // (VAULT_CONFLICT) rather than reminting them over new originals.
-        const vaultDir = path.join(pdirOf(project.slug), "vault");
-        const vaultPath = path.join(vaultDir, `${corpusId}.json`);
-        const parentVault = await readJsonFile(path.join(vaultDir, `${source.id}.json`));
+        const vaultPath = vaultFile(project.slug, corpusId);
+        const parentVault = await readJsonFile(vaultFile(project.slug, source.id));
         if (parentVault) await writeJsonAtomic(vaultPath, parentVault);
         const masked = await pseudonymize(next, vaultPath);
         next = masked.units; // the MASKED units are what persists

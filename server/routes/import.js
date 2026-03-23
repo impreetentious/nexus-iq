@@ -12,7 +12,7 @@
 //                     exported) → PII step ("off" | "scan" | "pseudonymize",
 //                     default "scan"; pseudonymize masks identifiers BEFORE
 //                     anything persists, vault at
-//                     projects/<slug>/vault/<corpusId>.json) → junk scan →
+//                     vaults/<slug>/<corpusId>.json) → junk scan →
 //                     corpus meta (incl. columnRoles when roles were sent) +
 //                     units.ndjson → ledger corpus.imported +
 //                     corpus.unitized (+ pii.pseudonymized) → temp deleted.
@@ -20,11 +20,11 @@
 //                     text-column cell was empty (silently dropped at
 //                     unitize); 0 for doc/turn sources.
 import path from "node:path";
-import { mkdir, writeFile, rm, readdir, stat } from "node:fs/promises";
+import { rm, readdir, stat } from "node:fs/promises";
 import { NexusIQError } from "../core/errors.js";
 import { parseMultipart } from "../router.js";
 import { newId } from "../core/ids.js";
-import { loadProject, updateProject, listProjects, DIR_MODE, FILE_MODE } from "../core/store.js";
+import { loadProject, updateProject, listProjects, writeFileAtomic } from "../core/store.js";
 import * as ledger from "../core/ledger.js";
 import { detect, bestTextColumn } from "../ingest/mapping.js";
 import { unitize } from "../ingest/unitize.js";
@@ -37,6 +37,7 @@ import {
   readJsonFile,
   corpusUnitsFile,
   safeId,
+  vaultFile,
 } from "./_shared.js";
 
 const PARSERS = {
@@ -186,11 +187,10 @@ export default [
       // parsers take file paths: stage the upload inside the bundle's .imports
       const importId = newId("imp");
       const dir = importsDir(project.slug);
-      await mkdir(dir, { recursive: true, mode: DIR_MODE });
       const srcPath = path.join(dir, `${importId}${ext}`);
       // raw corpus bytes — private mode for the brief window before the
       // finally below removes them
-      await writeFile(srcPath, file.buffer, { mode: FILE_MODE });
+      await writeFileAtomic(srcPath, file.buffer);
       let parsed;
       try {
         const mod = await import(spec.mod);
@@ -305,7 +305,7 @@ export default [
       // before any unit text persists or reaches a model provider. "scan"
       // counts and flags in place; "pseudonymize" REPLACES the unit array
       // with the masked copies and writes the reversible token map to
-      // projects/<slug>/vault/<corpusId>.json. That vault is the
+      // vaults/<slug>/<corpusId>.json. That vault is the
       // re-identification key: it must never enter the replication archive
       // (which builds from an explicit member allowlist) or any other export.
       let pii = { mode: piiMode };
@@ -314,7 +314,7 @@ export default [
         const { counts } = piiScan(units); // mutates unit.flags.pii in place
         pii = { mode: "scan", counts };
       } else if (piiMode === "pseudonymize") {
-        const vaultPath = path.join(pdirOf(project.slug), "vault", `${corpusId}.json`);
+        const vaultPath = vaultFile(project.slug, corpusId);
         const masked = await pseudonymize(units, vaultPath); // creates the vault dir + file
         units = masked.units; // the MASKED units are what persists and counts downstream
         piiVault = masked.vault;

@@ -8,8 +8,8 @@ import { rehydrateProject } from "./objects.js";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
-// Private-by-default modes for everything a bundle persists (project graphs,
-// corpora, vaults, keys). Applied at creation; ensurePrivateDir/File migrate
+// Private-by-default modes for project graphs, corpora, vaults, and keys.
+// Applied at creation; ensurePrivateDir/File migrate
 // pre-existing bundles best-effort. No-ops where the platform ignores modes.
 export const DIR_MODE = 0o700;
 export const FILE_MODE = 0o600;
@@ -18,12 +18,28 @@ export function projectsDir() {
   return process.env.NEXUS_IQ_PROJECTS_DIR || path.join(repoRoot, "projects");
 }
 
+// Re-identification maps are deliberately separate from portable project
+// bundles. Copying projects/ therefore cannot accidentally share a token map.
+export function vaultsDir() {
+  return process.env.NEXUS_IQ_VAULTS_DIR || path.join(repoRoot, "vaults");
+}
+
 // The store-boundary slug guard. Route params reach loadProject/updateProject
 // directly (the router decodes %2F INSIDE segments, so "..%2Foutside" arrives
 // as "../outside"), and creation-time validation in objects.js cannot protect
 // the read path. Same character class as routes/_shared.js safeId, plus a
 // resolved-path containment check so the joined path can never leave `dir`.
 const SAFE_SLUG = /^[A-Za-z0-9_-]+$/;
+
+/** Validate an opaque persisted identifier before it becomes a path segment. */
+export function assertStorageId(id, what = "id") {
+  if (typeof id !== "string" || !SAFE_SLUG.test(id)) {
+    throw new NexusIQError("VALIDATION", `invalid ${what} (must be letters, digits, "-" or "_")`, {
+      [what]: id,
+    });
+  }
+  return id;
+}
 
 export function assertProjectSlug(slug, dir, { code = "VALIDATION" } = {}) {
   const bad = () =>
@@ -34,7 +50,11 @@ export function assertProjectSlug(slug, dir, { code = "VALIDATION" } = {}) {
         : `invalid project slug '${slug}' (must be letters, digits, "-" or "_")`,
       { slug },
     );
-  if (typeof slug !== "string" || !SAFE_SLUG.test(slug)) throw bad();
+  try {
+    assertStorageId(slug, "project slug");
+  } catch {
+    throw bad();
+  }
   const base = path.resolve(dir ?? projectsDir());
   if (path.dirname(path.resolve(base, slug)) !== base) throw bad();
   return slug;
@@ -88,13 +108,15 @@ export function renameWithRetry(from, to, opts = {}) {
   return retryTransient(() => rename(from, to), opts);
 }
 
-// write tmp (unique name: concurrent writers must never share one), fsync,
-// rename — the §4 atomic-write recipe. tmp is removed if the rename fails.
-async function writeAtomic(file, data) {
+// The one atomic whole-file writer for private state: write a unique tmp,
+// fsync, then rename. It creates all parent directories and applies the
+// private modes regardless of which subsystem owns the artifact.
+export async function writeFileAtomic(file, data, { json = false } = {}) {
+  await mkdir(path.dirname(file), { recursive: true, mode: DIR_MODE });
   const tmp = `${file}.${process.pid}.${tmpSeq++}.tmp`;
   const fh = await open(tmp, "w", FILE_MODE);
   try {
-    await fh.writeFile(data, "utf8");
+    await fh.writeFile(json ? JSON.stringify(data, null, 2) : data, "utf8");
     await fh.sync();
   } finally {
     await fh.close();
@@ -126,8 +148,7 @@ export async function loadProject(slug, dir = projectsDir()) {
 async function writeProject(project, dir) {
   assertProjectSlug(project.slug, dir);
   const pdir = path.join(dir, project.slug);
-  await mkdir(pdir, { recursive: true, mode: DIR_MODE });
-  await writeAtomic(path.join(pdir, "project.json"), JSON.stringify(project, null, 2));
+  await writeFileAtomic(path.join(pdir, "project.json"), project, { json: true });
   return project;
 }
 

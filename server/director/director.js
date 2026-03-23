@@ -11,12 +11,11 @@
 //   Director call: researchers use it to customize the Director's standing
 //   instructions; tests use it to carry MockModel [[handler:...]] markers.
 import path from "node:path";
-import { mkdir, open, rm } from "node:fs/promises";
 import { NexusIQError } from "../core/errors.js";
 import { getAdapter } from "../providers/registry.js";
 import { completeWithRepair, Pool, withTruncationRetry } from "../providers/base.js";
 import { meter } from "../providers/costs.js";
-import { renameWithRetry, readNdjson, projectDir } from "../core/store.js";
+import { readNdjson, projectDir, writeFileAtomic } from "../core/store.js";
 import { sha256 } from "../core/ids.js";
 import { mulberry32 } from "../core/rng.js";
 
@@ -200,27 +199,10 @@ export function seededSample(items, n, seedStr) {
 
 // ---------------------------------------------------------------- artifacts
 
-let tmpSeq = 0;
-
-// Atomic JSON artifact write (briefs/<id>.json, gold/<id>.json): unique tmp,
-// fsync, rename — same recipe as core/store. Lives here because Director
-// modules are the only Wave-2 writers of standalone artifact files.
+// Atomic JSON artifact write (briefs/<id>.json, gold/<id>.json) uses the
+// store writer so every persisted bundle artifact receives private modes.
 export async function writeArtifact(projectDirPath, relPath, obj) {
   const file = path.join(projectDirPath, relPath);
-  await mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.${tmpSeq++}.tmp`;
-  const fh = await open(tmp, "w");
-  try {
-    await fh.writeFile(JSON.stringify(obj, null, 2), "utf8");
-    await fh.sync();
-  } finally {
-    await fh.close();
-  }
-  try {
-    await renameWithRetry(tmp, file);
-  } catch (err) {
-    await rm(tmp, { force: true }).catch(() => {});
-    throw err;
-  }
+  await writeFileAtomic(file, obj, { json: true });
   return file;
 }
