@@ -3,7 +3,7 @@
 // startServer() so tests
 // can spin up an ephemeral instance (port 0).
 import http from "node:http";
-import { readFile, readdir, chmod } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, readdir } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import os from "node:os";
 import path from "node:path";
@@ -113,8 +113,8 @@ async function mountRoutes(router, dir) {
 // file inside regardless of its own mode. Best-effort: modes are a no-op on
 // platforms that ignore them, and one un-chmod-able entry must not block boot.
 async function migratePrivateModes() {
-  const { projectsDir } = await import("./core/store.js");
-  const { configDir, keysFile } = await import("./routes/_shared.js");
+  const { projectsDir, renameWithRetry, vaultsDir } = await import("./core/store.js");
+  const { configDir, keysFile, vaultFile } = await import("./routes/_shared.js");
   const harden = async (p, mode) => {
     try {
       await chmod(p, mode);
@@ -128,6 +128,46 @@ async function migratePrivateModes() {
     }
   } catch {
     /* no projects dir yet */
+  }
+  // v2 stores reversible PII maps beside projects/, never inside a portable
+  // bundle. Move legacy maps before the server accepts requests so a
+  // pseudonymize/re-unitize call always sees the accumulated parent map.
+  try {
+    await mkdir(vaultsDir(), { recursive: true, mode: 0o700 });
+    for (const project of await readdir(projectsDir(), { withFileTypes: true })) {
+      if (!project.isDirectory()) continue;
+      const legacyDir = path.join(projectsDir(), project.name, "vault");
+      let legacyVaults;
+      try {
+        legacyVaults = await readdir(legacyDir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const vault of legacyVaults) {
+        if (!vault.isFile() || !vault.name.endsWith(".json")) continue;
+        const corpusId = vault.name.slice(0, -".json".length);
+        let target;
+        try {
+          target = vaultFile(project.name, corpusId);
+          await access(target);
+          console.warn(`[nexus-iq] legacy vault kept because target exists: ${vault.name}`);
+          continue;
+        } catch (err) {
+          if (err?.code !== "ENOENT") continue;
+        }
+        try {
+          await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+          await renameWithRetry(path.join(legacyDir, vault.name), target);
+        } catch (err) {
+          console.warn(
+            `[nexus-iq] could not migrate legacy vault ${vault.name}:`,
+            err?.message ?? err,
+          );
+        }
+      }
+    }
+  } catch {
+    /* no projects/vaults dir yet */
   }
   await harden(configDir(), 0o700);
   await harden(keysFile(), 0o600);
@@ -182,6 +222,10 @@ export async function startServer({
   });
 
   await mountRoutes(router, routesDir);
+
+  // Complete the legacy-vault move before handling any pseudonymize request.
+  // The migration itself is best-effort per file and never prevents startup.
+  await migratePrivateModes();
 
   const server = http.createServer((req, res) => {
     router.handle(req, res).catch((err) => {
@@ -242,9 +286,7 @@ export async function startServer({
   // a runner that is not there. Best-effort; never blocks startup.
   healOrphanedRuns().catch(() => {});
 
-  // Boot-time housekeeping (best-effort, never blocks startup): tighten legacy
-  // bundle/config permissions, and GC pending imports abandoned before confirm.
-  migratePrivateModes().catch(() => {});
+  // Boot-time housekeeping: GC pending imports abandoned before confirm.
   import("./routes/import.js").then((m) => m.cleanupStalePendingImports?.()).catch(() => {});
 
   return {

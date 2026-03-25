@@ -12,9 +12,9 @@
 // text — same counts, same vault, same [KIND_n] tokens. Non-string values
 // (numbers, nulls) pass through untouched: the regexes cannot match a bare
 // number, and masking must never change a value's type.
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { renameWithRetry, DIR_MODE, FILE_MODE } from "../core/store.js";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
+import { projectsDir, writeFileAtomic } from "../core/store.js";
+import { resolve, sep } from "node:path";
 import { NexusIQError } from "../core/errors.js";
 
 const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
@@ -277,15 +277,6 @@ export function scan(units) {
 
 const KIND_TOKEN = { email: "EMAIL", phone: "PHONE", ssn: "SSN", url_user: "URL", name: "NAME" };
 
-async function writeJsonAtomic(path, obj) {
-  await mkdir(dirname(path), { recursive: true, mode: DIR_MODE });
-  const tmp = path + ".tmp";
-  // the reversible re-identification vault is the most sensitive file a bundle
-  // holds — 0600 so it is not world/group readable
-  await writeFile(tmp, JSON.stringify(obj, null, 2), { encoding: "utf8", mode: FILE_MODE });
-  await renameWithRetry(tmp, path);
-}
-
 const TOKEN_RE = /\[(EMAIL|PHONE|SSN|URL|NAME)_\d+\]/g;
 const TOKEN_PARSE = /^\[([A-Z]+)_(\d+)\]$/;
 const LABEL_KIND = Object.fromEntries(Object.entries(KIND_TOKEN).map(([k, v]) => [v, k]));
@@ -336,7 +327,16 @@ export async function pseudonymize(units, vaultPath) {
       "pseudonymize requires a vault path outside the project bundle",
       {},
     );
-  const existing = await loadVault(vaultPath);
+  const projectRoot = resolve(projectsDir());
+  const resolvedVaultPath = resolve(vaultPath);
+  if (resolvedVaultPath === projectRoot || resolvedVaultPath.startsWith(`${projectRoot}${sep}`)) {
+    throw new NexusIQError(
+      "NO_VAULT_PATH",
+      "pseudonymize requires a vault path outside the project bundle",
+      { vaultPath },
+    );
+  }
+  const existing = await loadVault(resolvedVaultPath);
   const tokens = { ...(existing?.tokens || {}) }; // token -> original (union)
   const tokenOf = new Map(); // `${kind}|${original}` -> token
   const counters = {}; // label -> highest index in use
@@ -432,10 +432,10 @@ export async function pseudonymize(units, vaultPath) {
     tokens,
     counts: vaultCounts,
   };
-  await writeJsonAtomic(vaultPath, vault);
+  await writeFileAtomic(resolvedVaultPath, vault, { json: true });
   return {
     units: masked,
-    vault: { path: vaultPath, counts, tokenCount: Object.keys(tokens).length },
+    vault: { path: resolvedVaultPath, counts, tokenCount: Object.keys(tokens).length },
   };
 }
 

@@ -13,7 +13,7 @@
 // ids are validated at the lowest boundary (loadProject → assertProjectSlug;
 // runOutputsFile → safeId).
 //
-// The bundle NEVER contains config/keys.json, projects/<slug>/vault/*,
+// The bundle NEVER contains config/keys.json, vaults/<slug>/*,
 // projects/<slug>/.imports/*, or absolute filesystem paths. A field-name
 // scrub over the loaded project graph replaces any accidental key-looking
 // leaf ("apiKey", "secret", "token", …) with "[REDACTED]" as defense in
@@ -148,7 +148,7 @@ WHAT IS INCLUDED
 
 WHAT IS NEVER INCLUDED
   - config/keys.json (raw provider API keys)
-  - projects/<slug>/vault/ (PII re-identification vault)
+  - vaults/<slug>/ (PII re-identification vault, stored outside the project bundle)
   - projects/<slug>/.imports/ staging with raw uploads
   - absolute filesystem paths (would leak $HOME on this machine)
   - full run outputs beyond the optional 50-line sample above
@@ -159,7 +159,7 @@ BUNDLE COMPATIBILITY
 
 RESTORE
   This bundle CANNOT restore a project. To back up or restore Nexus IQ,
-  copy the projects/ and config/ directories verbatim while the server is
+  copy the projects/, vaults/, and config/ directories verbatim while the server is
   stopped. See docs/backup-restore.md.
 `;
 
