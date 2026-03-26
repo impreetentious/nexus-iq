@@ -9,7 +9,7 @@
 //     the derived units are re-scanned; {mode: "scan", counts} rides the
 //     response, the derived corpus entry, and the corpus.unitized payload;
 //   - parent mode "pseudonymize": the derived corpus gets its OWN vault at
-//     projects/<slug>/vault/<derivedId>.json, seeded from the parent's map,
+//     vaults/<slug>/<derivedId>.json, seeded from the parent's map,
 //     so parent tokens stay protected no-ops and numbering continues past
 //     them; identifiers the original pass never saw (metadata masked before
 //     meta coverage existed) are masked NOW; ledger appends pii.pseudonymized
@@ -35,14 +35,17 @@ import * as ledger from "../../server/core/ledger.js";
 
 let tmpProjects;
 let tmpConfig;
+let tmpVaults;
 let srv;
 let base;
 
 before(async () => {
   tmpProjects = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-pii-re-"));
   tmpConfig = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-pii-re-cfg-"));
+  tmpVaults = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-pii-re-vaults-"));
   process.env.NEXUS_IQ_PROJECTS_DIR = tmpProjects;
   process.env.NEXUS_IQ_CONFIG_DIR = tmpConfig;
+  process.env.NEXUS_IQ_VAULTS_DIR = tmpVaults;
   srv = await startServer({ port: 0 });
   base = `http://127.0.0.1:${srv.port}`;
 });
@@ -51,8 +54,10 @@ after(async () => {
   await srv.close();
   delete process.env.NEXUS_IQ_PROJECTS_DIR;
   delete process.env.NEXUS_IQ_CONFIG_DIR;
+  delete process.env.NEXUS_IQ_VAULTS_DIR;
   await rm(tmpProjects, { recursive: true, force: true }).catch(() => {});
   await rm(tmpConfig, { recursive: true, force: true }).catch(() => {});
+  await rm(tmpVaults, { recursive: true, force: true }).catch(() => {});
 });
 
 // ------------------------------------------------------------ HTTP helpers
@@ -130,7 +135,7 @@ function makeMetaPiiCsv() {
 
 const unitsFile = (slug, corpusId) =>
   path.join(projectDir(slug), "corpora", corpusId, "units.ndjson");
-const vaultFile = (slug, corpusId) => path.join(projectDir(slug), "vault", `${corpusId}.json`);
+const vaultFile = (slug, corpusId) => path.join(tmpVaults, slug, `${corpusId}.json`);
 const ZERO_COUNTS = { email: 0, phone: 0, ssn: 0, url_user: 0, name: 0 };
 
 async function importWith(slug, pii) {
@@ -298,7 +303,7 @@ test("off parent: reunitize inherits off — raw text honored, no flags, no vaul
     units.every((u) => u.flags?.pii === undefined),
     "no pii flags in off mode",
   );
-  await assert.rejects(access(path.join(projectDir(slug), "vault")), "off creates no vault dir");
+  await assert.rejects(access(path.join(tmpVaults, slug)), "off creates no vault dir");
 
   const p = await ok("GET", `/api/projects/${slug}`);
   assert.deepEqual(p.corpora.find((c) => c.id === re.corpusId).pii, { mode: "off" });

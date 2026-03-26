@@ -7,7 +7,7 @@
 //   - scan: units keep raw text on disk, unit.flags.pii set, counts surface in
 //     the response, the corpus record and the corpus.imported ledger event;
 //   - pseudonymize: the MASKED units are what persists; the reversible map is
-//     written to projects/<slug>/vault/<corpusId>.json; ledger appends the
+//     written to vaults/<slug>/<corpusId>.json; ledger appends the
 //     taxonomy's reserved pii.pseudonymized event;
 //   - off: no scan, no flags, no vault — only pii.mode "off" recorded;
 //   - unknown pii value → VALIDATION;
@@ -31,14 +31,17 @@ import * as ledger from "../../server/core/ledger.js";
 
 let tmpProjects;
 let tmpConfig;
+let tmpVaults;
 let srv;
 let base;
 
 before(async () => {
   tmpProjects = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-pii-"));
   tmpConfig = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-pii-cfg-"));
+  tmpVaults = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-pii-vaults-"));
   process.env.NEXUS_IQ_PROJECTS_DIR = tmpProjects;
   process.env.NEXUS_IQ_CONFIG_DIR = tmpConfig;
+  process.env.NEXUS_IQ_VAULTS_DIR = tmpVaults;
   srv = await startServer({ port: 0 });
   base = `http://127.0.0.1:${srv.port}`;
 });
@@ -47,8 +50,10 @@ after(async () => {
   await srv.close();
   delete process.env.NEXUS_IQ_PROJECTS_DIR;
   delete process.env.NEXUS_IQ_CONFIG_DIR;
+  delete process.env.NEXUS_IQ_VAULTS_DIR;
   await rm(tmpProjects, { recursive: true, force: true }).catch(() => {});
   await rm(tmpConfig, { recursive: true, force: true }).catch(() => {});
+  await rm(tmpVaults, { recursive: true, force: true }).catch(() => {});
 });
 
 // ------------------------------------------------------------ HTTP helpers
@@ -129,7 +134,7 @@ function makePiiCsv() {
 
 const unitsFile = (slug, corpusId) =>
   path.join(projectDir(slug), "corpora", corpusId, "units.ndjson");
-const vaultFile = (slug, corpusId) => path.join(projectDir(slug), "vault", `${corpusId}.json`);
+const vaultFile = (slug, corpusId) => path.join(tmpVaults, slug, `${corpusId}.json`);
 
 // create a project, upload the fixture, confirm with the given pii mode
 // (undefined = omit the field, exercising the default)

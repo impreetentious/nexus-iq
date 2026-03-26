@@ -16,7 +16,7 @@ A support bundle is a **diagnostic snapshot** for debugging. It is **not** a bac
 **NEVER include:**
 
 - Raw provider keys (`config/keys.json` contents, or any `apiKey` / `sk-` material).
-- PII vault files (`projects/<slug>/vault/**`).
+- PII vault files (`vaults/<slug>/**`, stored outside portable project bundles).
 - Abandoned import staging blobs under `.imports/` when they embed upload bytes.
 - Absolute home-directory paths; paths in the bundle are project-relative.
 
