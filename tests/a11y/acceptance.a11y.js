@@ -3,6 +3,10 @@
 // Covers keyboard reachability, axe-core violations, zoom (200%), and narrow
 // (360px) layouts across primary screens in fixtures mode.
 //
+// The requirement: keyboard reachability, zero
+// serious or critical axe violations, usable layout at 200% zoom, and no
+// horizontal overflow at 360px, on every primary screen.
+//
 // Run (devDependency install required):
 //   npx playwright install chromium
 //   npm run test:a11y
@@ -41,6 +45,18 @@ async function axeScan(page, name) {
 }
 
 test.describe("Nexus IQ a11y", () => {
+  test("backend UI ships an enforcing CSP without browser violations", async ({ page }) => {
+    const violations = [];
+    page.on("console", (message) => {
+      if (message.type() === "error" && /content security policy/i.test(message.text()))
+        violations.push(message.text());
+    });
+    const response = await page.goto(`${BASE}#/?fixtures=1`);
+    expect(response?.headers()["content-security-policy"]).toContain("default-src 'self'");
+    await page.waitForSelector("#workspace", { timeout: 30_000 });
+    expect(violations).toEqual([]);
+  });
+
   test("home: axe + skip link + rail toggle keyboard", async ({ page }) => {
     await openApp(page);
     await axeScan(page, "home");

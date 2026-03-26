@@ -1,6 +1,6 @@
 {
   "name": "nexus-iq",
-  "version": "2.8.5",
+  "version": "2.9.0",
   "description": "Local-first qualitative text measurement platform.",
   "type": "module",
   "license": "MIT",

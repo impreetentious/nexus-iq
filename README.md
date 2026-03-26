@@ -44,7 +44,7 @@ Keys are stored in `config/keys.json`, which is gitignored and excluded from eve
 
 ## Privacy & PII Handling
 
-Before analysis, Nexus IQ can scan a corpus for emails, phone numbers, SSNs, URL-embedded credentials, and likely names, then reversibly pseudonymize them (`[EMAIL_1]`, `[NAME_2]`, …) with the re-identification map stored outside the project bundle. This covers both unit text and string metadata columns.
+Before analysis, Nexus IQ can scan a corpus for emails, phone numbers, SSNs, URL-embedded credentials, and likely names, then reversibly pseudonymize them (`[EMAIL_1]`, `[NAME_2]`, …) with the re-identification map stored outside the project bundle at `vaults/<project-slug>/<corpus-id>.json`. This covers both unit text and string metadata columns.
 
 Name detection is a capitalized-bigram heuristic with a stoplist, not a trained NER model. It will miss single first names and non-"Firstname Lastname" name orders, and can occasionally mis-flag or miss unlisted proper nouns. Treat it as a strong first pass, not a guarantee — review a sample of masked output before sharing or exporting a corpus that contains real personal data.
 
@@ -100,7 +100,7 @@ Then open `http://localhost:3000`. The image includes `demo/` for the documented
 - The app is designed to run locally on macOS or Windows with the same basic workflow.
 - Project bundles are file-based and portable, optimized for practical local use rather than large-scale hosted deployment.
 - Replication exports include machine-readable artifacts plus generated R and Python helpers for external verification.
-- The Next.js shell sends baseline security headers (`nosniff`, `SAMEORIGIN`, strict referrer policy, and a restricted permissions policy). CSP is left for deployment-host tuning.
+- The Next.js shell and local UI send a same-origin Content Security Policy, plus `nosniff`, `SAMEORIGIN`, strict referrer policy, and a restricted permissions policy.
 
 ## License
 
@@ -108,4 +108,4 @@ MIT © Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v2.8.5
+**Version:** v2.9.0
