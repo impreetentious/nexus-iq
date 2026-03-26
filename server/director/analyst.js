@@ -6,7 +6,7 @@
 // Evidence refs are filtered to units actually present in the outputs sample.
 import path from "node:path";
 import { createAnalysis } from "../core/objects.js";
-import { readNdjson, projectDir } from "../core/store.js";
+import { assertStorageId, readNdjson, projectDir } from "../core/store.js";
 import { detect } from "../ingest/mapping.js";
 import { callDirector } from "./director.js";
 import { analystPrompt, ANALYST_SCHEMA } from "./prompts.js";
@@ -30,7 +30,12 @@ export async function suggestAnalyses(project, run, outputsSample) {
   let metaColumns = [];
   const unitsById = new Map();
   try {
-    const file = path.join(projectDir(project.slug), "corpora", run.corpusId, "units.ndjson");
+    const file = path.join(
+      projectDir(project.slug),
+      "corpora",
+      assertStorageId(run.corpusId, "corpus"),
+      "units.ndjson",
+    );
     const units = await readNdjson(file, { limit: 500 });
     const { columns } = detect(units.map((u) => u.meta ?? {}));
     metaColumns = columns.filter((c) => c.role === "categorical").map((c) => c.name);

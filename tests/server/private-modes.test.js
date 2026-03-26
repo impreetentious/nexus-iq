@@ -9,15 +9,19 @@ import os from "node:os";
 import path from "node:path";
 import { startServer } from "../../server/index.js";
 import { cleanupStalePendingImports } from "../../server/routes/import.js";
+import * as cache from "../../server/core/cache.js";
+import { writeArtifact } from "../../server/director/director.js";
 
 const POSIX = process.platform !== "win32";
-let tmpProjects, tmpConfig, srv, base, slug;
+let tmpProjects, tmpConfig, tmpVaults, srv, base, slug;
 
 before(async () => {
   tmpProjects = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-modes-"));
   tmpConfig = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-modes-cfg-"));
+  tmpVaults = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-modes-vaults-"));
   process.env.NEXUS_IQ_PROJECTS_DIR = tmpProjects;
   process.env.NEXUS_IQ_CONFIG_DIR = tmpConfig;
+  process.env.NEXUS_IQ_VAULTS_DIR = tmpVaults;
   srv = await startServer({ port: 0 });
   base = `http://127.0.0.1:${srv.port}`;
   const created = await (
@@ -34,8 +38,10 @@ after(async () => {
   await srv?.close?.();
   delete process.env.NEXUS_IQ_PROJECTS_DIR;
   delete process.env.NEXUS_IQ_CONFIG_DIR;
+  delete process.env.NEXUS_IQ_VAULTS_DIR;
   await rm(tmpProjects, { recursive: true, force: true }).catch(() => {});
   await rm(tmpConfig, { recursive: true, force: true }).catch(() => {});
+  await rm(tmpVaults, { recursive: true, force: true }).catch(() => {});
 });
 
 const mode = async (p) => (await stat(p)).mode & 0o777;
@@ -61,6 +67,21 @@ test("provider keys.json is written 0600", { skip: !POSIX }, async () => {
     "keys.json must be owner-only",
   );
 });
+
+test(
+  "cache entries and Director artifacts inherit the private writer modes",
+  { skip: !POSIX },
+  async () => {
+    const projectDir = path.join(tmpProjects, slug);
+    const key = "a".repeat(64);
+    await cache.put(projectDir, key, { label: "yes" });
+    await writeArtifact(projectDir, "briefs/b_1.json", { id: "b_1" });
+    assert.equal(await mode(path.join(projectDir, "cache", "aa")), 0o700);
+    assert.equal(await mode(path.join(projectDir, "cache", "aa", key.slice(2))), 0o600);
+    assert.equal(await mode(path.join(projectDir, "briefs")), 0o700);
+    assert.equal(await mode(path.join(projectDir, "briefs", "b_1.json")), 0o600);
+  },
+);
 
 test("cleanupStalePendingImports drops staging older than the TTL, keeps fresh", async () => {
   const dir = path.join(tmpProjects, slug, ".imports");

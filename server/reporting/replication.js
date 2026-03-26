@@ -14,7 +14,7 @@ import { zipSync, strToU8 } from "fflate";
 import { NexusIQError } from "../core/errors.js";
 import { sha256 } from "../core/ids.js";
 import * as ledger from "../core/ledger.js";
-import { readNdjson } from "../core/store.js";
+import { assertStorageId, readNdjson } from "../core/store.js";
 import { loadAnalysis, loadGoldset, loadRun } from "./methods.js";
 
 function fail(message, details = {}) {
@@ -55,7 +55,9 @@ function safeName(name) {
 async function loadUnitsMap(projectDir, corpusIds) {
   const map = new Map();
   for (const id of corpusIds) {
-    const units = await readNdjson(path.join(projectDir, "corpora", id, "units.ndjson"));
+    const units = await readNdjson(
+      path.join(projectDir, "corpora", assertStorageId(id, "corpus"), "units.ndjson"),
+    );
     for (const u of units) map.set(u.id, { ...u, corpusId: id });
   }
   return map;
