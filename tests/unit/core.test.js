@@ -11,6 +11,7 @@ import {
   loadProject,
   saveProject,
   appendNdjson,
+  openNdjsonAppender,
   readNdjson,
   listProjects,
   projectsDir,
@@ -115,6 +116,28 @@ test("store: appendNdjson 10k lines then readNdjson offset/limit returns exactly
   assert.equal(rows.length, 10);
   assert.deepEqual(rows[0], { i: 9990 });
   assert.deepEqual(rows[9], { i: 9999 });
+});
+
+test("store: a long-lived NDJSON appender heals once and serializes concurrent lines", async (t) => {
+  const dir = await tmpdir(t);
+  const file = path.join(dir, "stream.ndjson");
+  await writeFile(file, '{"seed":true}\n{"torn":', "utf8");
+
+  const appender = await openNdjsonAppender(file);
+  await Promise.all(Array.from({ length: 100 }, (_, i) => appender.append({ i })));
+  await appender.close();
+
+  const rows = await readNdjson(file);
+  assert.deepEqual(rows[0], { seed: true });
+  assert.equal(rows.length, 101);
+  assert.deepEqual(
+    rows
+      .slice(1)
+      .map((row) => row.i)
+      .sort((a, b) => a - b),
+    Array.from({ length: 100 }, (_, i) => i),
+  );
+  await assert.rejects(appender.append({ late: true }), /appender is closed/);
 });
 
 test("store: readNdjson filter applies before offset/limit; missing file reads as []", async (t) => {
@@ -535,8 +558,8 @@ test("server: /api/health returns ok + version + providers", async (t) => {
   const body = await r.json();
   assert.equal(body.ok, true);
   assert.match(body.version, /^\d+\.\d+\.\d+/);
-  // Task A shipped a stub providers map; the Task I routes layer now fills it
-  // (configured keys present / local discovery / mock always reachable).
+  // Provider health reflects configured keys, local discovery, and the mock
+  // provider, which is always reachable.
   assert.equal(typeof body.providers, "object");
   assert.equal(body.providers.mock, true);
 });

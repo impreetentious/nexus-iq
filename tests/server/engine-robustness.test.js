@@ -1,6 +1,4 @@
-// Engine-robustness regression suite (concurrency/IO sweep). Pins,
-// red-first, the five confirmed code-review bugs in the run engine, the store
-// NDJSON appender, and the dossier/analyses readers:
+// Engine, storage, and analysis-reader robustness regressions:
 //
 //   1  persistRun must update only the engine-owned mutable fields in place —
 //      a concurrent route mutation (PUT /runs/:r rename, or any other write to
@@ -135,7 +133,7 @@ function routeHandler(routes, method, pattern) {
 // 1 — persistRun in-place update (no whole-object clobber)
 // =============================================================================
 
-test("fix 1: a concurrent rename mid-run survives the engine's next checkpoint (persistRun updates engine-owned fields in place)", async () => {
+test("a concurrent rename mid-run survives the engine's next checkpoint", async () => {
   const slug = "persist-rename";
   const N = 120; // > CHECKPOINT_EVERY (25) so a checkpoint write lands mid-run
   const { project } = await setup(slug, { units: makeUnits(N), instruments: [judgeInstrument()] });
@@ -178,7 +176,7 @@ test("fix 1: a concurrent rename mid-run survives the engine's next checkpoint (
   );
 });
 
-test("fix 1: route-owned fields set after createRun (pinned/capUSD) survive a full run untouched", async () => {
+test("route-owned fields set after createRun survive a full run untouched", async () => {
   const slug = "persist-fields";
   const N = 60;
   const { project } = await setup(slug, { units: makeUnits(N), instruments: [judgeInstrument()] });
@@ -210,7 +208,7 @@ test("fix 1: route-owned fields set after createRun (pinned/capUSD) survive a fu
 // 2 — appendNdjson transient-lock retry
 // =============================================================================
 
-test("fix 2: the shared transient-error retry helper retries EPERM/EBUSY/EACCES and rethrows others", async () => {
+test("the transient-error retry helper retries EPERM/EBUSY/EACCES and rethrows others", async () => {
   assert.equal(
     typeof store.retryTransient,
     "function",
@@ -269,7 +267,7 @@ test("fix 2: the shared transient-error retry helper retries EPERM/EBUSY/EACCES 
   assert.equal(calls3, 3, "gave up after exactly `attempts` tries");
 });
 
-test("fix 2: appendNdjson retries a one-shot transient append fault and still writes the line", async (t) => {
+test("appendNdjson retries a one-shot transient append fault and still writes the line", async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-append-"));
   t.after(() => rm(dir, { recursive: true, force: true }).catch(() => {}));
   const file = path.join(dir, "outputs.ndjson");
@@ -315,7 +313,7 @@ test("fix 2: appendNdjson retries a one-shot transient append fault and still wr
 // 3 — evidence dossier does not swallow corruption
 // =============================================================================
 
-test("fix 3: a corrupt run outputs file does NOT silently vanish from the dossier (it surfaces)", async () => {
+test("a corrupt run outputs file surfaces instead of vanishing from the dossier", async () => {
   const slug = "dossier-corrupt";
   const units = makeUnits(6);
   const { project } = await setup(slug, { units, instruments: [judgeInstrument()] });
@@ -386,7 +384,7 @@ test("fix 3: a corrupt run outputs file does NOT silently vanish from the dossie
 // readNdjson — out of scope here). What this test pins is the USER-VISIBLE
 // guarantee: a corrupt panel outputs file does NOT yield a silently-empty
 // analysis — it surfaces as an error instead of vanishing the data.
-test("fix 4 (pin): a corrupt panel outputs file surfaces from the analysis instead of silently emptying", async () => {
+test("a corrupt panel outputs file surfaces from the analysis instead of silently emptying", async () => {
   const slug = "panel-corrupt";
   const N = 9;
   const units = makeUnits(N);
@@ -431,7 +429,7 @@ test("fix 4 (pin): a corrupt panel outputs file surfaces from the analysis inste
 // 5 — double-launch registry poison
 // =============================================================================
 
-test("fix 5: two overlapping launches for one run do not poison the registry (run never ends up failed; exactly one execution proceeds)", async () => {
+test("two overlapping launches for one run do not poison the registry", async () => {
   const slug = "double-launch";
   const N = 80;
   const { project } = await setup(slug, { units: makeUnits(N), instruments: [judgeInstrument()] });

@@ -1,7 +1,7 @@
 // Run engine: executes an instrument over a corpus with checkpointing,
 // content-addressed caching, budget caps, quarantine, and escalation.
 //
-// Persistence model (per the Wave-1 contract amendments): the Run object
+// Persistence model: the Run object
 // lives in project.runs[] and every status/checkpoint/cost mutation goes
 // through store.updateProject (atomic, lock-serialized). Outputs are append-
 // only NDJSON at <project>/runs/<runId>/outputs.ndjson — one line per unit
@@ -66,7 +66,7 @@ import { NexusIQError } from "../core/errors.js";
 import {
   loadProject,
   updateProject,
-  appendNdjson,
+  openNdjsonAppender,
   readNdjson,
   projectsDir,
   projectDir,
@@ -84,6 +84,7 @@ import { score as dictScore } from "../instruments/dictionary.js";
 import * as monitor from "./monitor.js";
 
 const CHECKPOINT_EVERY = 25;
+const CHECKPOINT_MIN_INTERVAL_MS = 1000;
 const DEFAULT_CONCURRENCY = 4;
 const QUARANTINE_CODES = new Set(["SCHEMA_INVALID", "PROVIDER_REFUSAL", "TRUNCATED"]);
 const PAUSE_CODES = new Set(["PROVIDER_UNREACHABLE", "RATE_LIMITED_EXHAUSTED"]);
@@ -101,11 +102,11 @@ const DIRECTOR_PAUSE_CODES = new Set([
 // Quarantine entries carry their reasons: {unitId, code, message} (message
 // trimmed to ≤200 chars). A researcher staring at an empty preview or a
 // shrunken run must see WHY units vanished — a bare id list told them
-// nothing (February 2025 field bug: mass TRUNCATED quarantines read as "empty
+// nothing (mass TRUNCATED quarantines otherwise read as "empty
 // results"). Older run records persisted bare unitId strings; readers
 // normalize on load (string → {unitId, code: null, message: null}) so legacy
 // run.json / project.runs[] keep working. Dedupe is by unitId, first entry
-// wins (parity with the old Set semantics).
+// wins (matching the legacy Set semantics).
 const QUARANTINE_MESSAGE_MAX = 200;
 
 const trimQuarantineMessage = (message) => {
@@ -894,6 +895,7 @@ async function executeRunInner(project, run, opts) {
   const quarantine = new Map(run.quarantine.map((q) => [q.unitId, q])); // unitId → {unitId, code, message}
   const stop = { reason: null, error: null };
   let sinceCheckpoint = 0;
+  let lastCheckpointAt = Date.now();
 
   const syncCost = () => {
     const t = ctx.m.totals();
@@ -919,113 +921,128 @@ async function executeRunInner(project, run, opts) {
     await persistRun(slug, run, dir);
   };
 
-  await forEachUnit(pending, ctx.concurrency, async (unit) => {
-    if (stop.reason) return false;
-    const control = opts.shouldStop?.();
-    if (control === "pause" || control === "abort") {
-      stop.reason = control === "abort" ? "user-abort" : "user-pause";
-      return false;
-    }
-    syncCost();
-    if (overBudget()) {
-      stop.reason = "aborted";
-      return false;
-    }
-    let result;
-    try {
-      result = await processUnit(ctx, unit, byUnit.get(unit.id));
-    } catch (err) {
-      if (PAUSE_CODES.has(err?.code)) {
-        stop.reason = "paused";
-        stop.error = err;
+  const outputAppender = await openNdjsonAppender(outputsFile);
+  try {
+    await forEachUnit(pending, ctx.concurrency, async (unit) => {
+      if (stop.reason) return false;
+      const control = opts.shouldStop?.();
+      if (control === "pause" || control === "abort") {
+        stop.reason = control === "abort" ? "user-abort" : "user-pause";
         return false;
       }
-      stop.reason = "failed";
-      stop.error = err;
-      return false;
-    }
-    for (const line of result.newLines) {
-      await appendNdjson(outputsFile, cleanLine(line));
-    }
-    if (result.quarantined) {
-      quarantine.set(unit.id, quarantineEntry(unit.id, result.error));
-      done += 1; // quarantined units count as handled for progress purposes
-      monitor.recordQuarantine(run.id); // …and the LIVE bar must reach total too
-      monitor.warn(run.id, {
-        kind: "quarantine",
-        message: `unit ${unit.id} quarantined: ${result.error?.code}`,
-        unitId: unit.id,
-        code: result.error?.code ?? null,
-      });
-    } else {
-      const final = result.final;
-      let escalated;
+      syncCost();
+      if (overBudget()) {
+        stop.reason = "aborted";
+        return false;
+      }
+      let result;
       try {
-        escalated = await maybeEscalate(ctx, unit, final, { escalate: opts.escalate, p99 });
+        result = await processUnit(ctx, unit, byUnit.get(unit.id));
       } catch (err) {
-        // The Director's second opinion failed — classify INSIDE the per-unit
-        // taxonomy so the worker pool never rejects (see the header contract).
-        if (DIRECTOR_PAUSE_CODES.has(err?.code)) {
-          // infrastructure fault → the RUN pauses, resumable: this unit's
-          // final line is not appended, so resume re-runs it off the cached
-          // worker verdicts and re-attempts only the second opinion
+        if (PAUSE_CODES.has(err?.code)) {
           stop.reason = "paused";
           stop.error = err;
           return false;
         }
-        // deterministic fault → the worker verdict stands; the line stays
-        // flagged by the predicate, and the failure is visible in telemetry
-        escalated = final.escalated === true;
-        monitor.warn(run.id, {
-          kind: "escalation-failed",
-          message: `unit ${unit.id}: Director second opinion failed (${err?.code ?? "ERROR"}) — the worker verdict stands`,
-          unitId: unit.id,
-          code: err?.code ?? null,
-        });
-      }
-      if (escalated) run.escalation.count += 1;
-      await appendNdjson(outputsFile, cleanLine(final));
-      // This unit just produced a durable verdict line. If a PRIOR session
-      // quarantined it (a transient that has since cleared on resume), drop the
-      // stale quarantine entry: otherwise the unit ends with BOTH a verdict
-      // line AND a quarantine entry, and results/exports that exclude
-      // quarantined units would vanish a verdicted unit while run.completed
-      // ledgers a phantom quarantined count.
-      quarantine.delete(unit.id);
-      done += 1;
-      monitor.recordOutput(run.id, final);
-    }
-    syncCost();
-    opts.onTick?.(monitor.runState(run.id));
-    // The drift tripwire re-judges gold via an internal runEphemeral that
-    // RETHROWS provider faults (PROVIDER_UNREACHABLE / RATE_LIMITED_EXHAUSTED).
-    // A drift check is a MONITORING side-channel on calibrated runs — a
-    // transient fault during it must never reject the worker pool (bug-1's
-    // cascade) and must never fail the run. So: a PAUSE-class fault pauses the
-    // run resumably (the same path a unit pause takes — resume re-checks
-    // drift); ANY other fault warns and the run CONTINUES (a broken drift check
-    // is not a reason to abandon the verdicts).
-    try {
-      await monitor.driftTick(run.id);
-    } catch (err) {
-      if (PAUSE_CODES.has(err?.code)) {
-        stop.reason = "paused";
+        stop.reason = "failed";
         stop.error = err;
         return false;
       }
-      monitor.warn(run.id, {
-        kind: "drift-failed",
-        message: `drift re-judge failed (${err?.code ?? "ERROR"}) — the run continues; the drift check is unavailable`,
-        code: err?.code ?? null,
-      });
-    }
-    sinceCheckpoint += 1;
-    if (sinceCheckpoint >= CHECKPOINT_EVERY) {
-      sinceCheckpoint = 0;
-      await checkpoint();
-    }
-    return true;
-  });
+      for (const line of result.newLines) {
+        await outputAppender.append(cleanLine(line));
+      }
+      if (result.quarantined) {
+        quarantine.set(unit.id, quarantineEntry(unit.id, result.error));
+        done += 1; // quarantined units count as handled for progress purposes
+        monitor.recordQuarantine(run.id); // …and the LIVE bar must reach total too
+        monitor.warn(run.id, {
+          kind: "quarantine",
+          message: `unit ${unit.id} quarantined: ${result.error?.code}`,
+          unitId: unit.id,
+          code: result.error?.code ?? null,
+        });
+      } else {
+        const final = result.final;
+        let escalated;
+        try {
+          escalated = await maybeEscalate(ctx, unit, final, { escalate: opts.escalate, p99 });
+        } catch (err) {
+          // The Director's second opinion failed — classify INSIDE the per-unit
+          // taxonomy so the worker pool never rejects (see the header contract).
+          if (DIRECTOR_PAUSE_CODES.has(err?.code)) {
+            // infrastructure fault → the RUN pauses, resumable: this unit's
+            // final line is not appended, so resume re-runs it off the cached
+            // worker verdicts and re-attempts only the second opinion
+            stop.reason = "paused";
+            stop.error = err;
+            return false;
+          }
+          // deterministic fault → the worker verdict stands; the line stays
+          // flagged by the predicate, and the failure is visible in telemetry
+          escalated = final.escalated === true;
+          monitor.warn(run.id, {
+            kind: "escalation-failed",
+            message: `unit ${unit.id}: Director second opinion failed (${err?.code ?? "ERROR"}) — the worker verdict stands`,
+            unitId: unit.id,
+            code: err?.code ?? null,
+          });
+        }
+        if (escalated) run.escalation.count += 1;
+        await outputAppender.append(cleanLine(final));
+        // This unit just produced a durable verdict line. If a PRIOR session
+        // quarantined it (a transient that has since cleared on resume), drop the
+        // stale quarantine entry: otherwise the unit ends with BOTH a verdict
+        // line AND a quarantine entry, and results/exports that exclude
+        // quarantined units would vanish a verdicted unit while run.completed
+        // ledgers a phantom quarantined count.
+        quarantine.delete(unit.id);
+        done += 1;
+        monitor.recordOutput(run.id, final);
+      }
+      syncCost();
+      opts.onTick?.(monitor.runState(run.id));
+      // The drift tripwire re-judges gold via an internal runEphemeral that
+      // RETHROWS provider faults (PROVIDER_UNREACHABLE / RATE_LIMITED_EXHAUSTED).
+      // A drift check is a MONITORING side-channel on calibrated runs — a
+      // transient fault during it must never reject the worker pool or fail the
+      // run. So: a PAUSE-class fault pauses the
+      // run resumably (the same path a unit pause takes — resume re-checks
+      // drift); ANY other fault warns and the run CONTINUES (a broken drift check
+      // is not a reason to abandon the verdicts).
+      try {
+        await monitor.driftTick(run.id);
+      } catch (err) {
+        if (PAUSE_CODES.has(err?.code)) {
+          stop.reason = "paused";
+          stop.error = err;
+          return false;
+        }
+        monitor.warn(run.id, {
+          kind: "drift-failed",
+          message: `drift re-judge failed (${err?.code ?? "ERROR"}) — the run continues; the drift check is unavailable`,
+          code: err?.code ?? null,
+        });
+      }
+      sinceCheckpoint += 1;
+      // Fast local instruments can finish 25 units in a few milliseconds.
+      // Persisting the full project graph (including fsync) at that rate adds
+      // severe I/O amplification without improving resume correctness: the
+      // durable outputs file is the source of truth and terminal state is
+      // always persisted below. Slow provider runs still checkpoint every 25
+      // units because their batches naturally exceed this interval.
+      if (
+        sinceCheckpoint >= CHECKPOINT_EVERY &&
+        Date.now() - lastCheckpointAt >= CHECKPOINT_MIN_INTERVAL_MS
+      ) {
+        sinceCheckpoint = 0;
+        await checkpoint();
+        lastCheckpointAt = Date.now();
+      }
+      return true;
+    });
+  } finally {
+    await outputAppender.close();
+  }
 
   // terminal state
   syncCost();

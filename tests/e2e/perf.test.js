@@ -1,4 +1,4 @@
-// Task J — performance budgets (design §10), asserted through the REAL
+// Performance budgets asserted through the real
 // product paths: HTTP import → confirm, the Instant Read endpoint, and a
 // full-corpus dictionary run through the run engine. Budgets are deliberately
 // generous (CI machines vary wildly); the tight numbers are LOGGED so a

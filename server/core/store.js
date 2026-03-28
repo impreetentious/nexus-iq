@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rename, readdir, stat, rm, appendFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, readdir, stat, rm } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import readline from "node:readline";
 import path from "node:path";
@@ -283,6 +283,34 @@ function withAppendLock(key, fn) {
   return next;
 }
 
+async function openCleanAppendHandle(file) {
+  let fh = null;
+  await appendFaultInjector?.();
+  try {
+    fh = await open(file, "a+", FILE_MODE);
+    let { size } = await fh.stat();
+    if (size > 0) {
+      const last = Buffer.alloc(1);
+      await fh.read(last, 0, 1, size - 1);
+      if (last[0] !== 0x0a) {
+        await fh.close();
+        fh = null;
+        const heal = await open(file, "r+");
+        try {
+          size = await truncateTornTail(heal, size);
+        } finally {
+          await heal.close();
+        }
+        fh = await open(file, "a+", FILE_MODE);
+      }
+    }
+    return { fh, size };
+  } catch (err) {
+    await fh?.close().catch(() => {});
+    throw err;
+  }
+}
+
 // Append one JSON line. If a previous append was torn (file does not end with
 // "\n"), the partial final line never durably completed — truncate it first so
 // the file is back to "complete lines only", then append. Returns {size}: the
@@ -303,34 +331,76 @@ export async function appendNdjson(file, obj) {
   const bytes = Buffer.byteLength(line);
   return withAppendLock(path.resolve(file), () =>
     retryTransient(async () => {
-      // Heal first with a read-write handle (Windows forbids ftruncate on append-
-      // mode handles), then append with O_APPEND semantics so concurrent
-      // in-process appends interleave whole lines instead of clobbering offsets.
-      let size = 0;
-      let fh = null;
-      await appendFaultInjector?.();
+      // The common clean-tail path uses one append/read handle for the stat,
+      // last-byte check, and write. A torn tail is uncommon and reopens in r+
+      // only for the truncate because Windows forbids ftruncate on an append-
+      // mode handle. Keeping O_APPEND preserves whole-line writes.
+      const { fh, size } = await openCleanAppendHandle(file);
       try {
-        fh = await open(file, "r+");
-      } catch (err) {
-        if (err.code !== "ENOENT") throw err; // missing file: appendFile creates it
+        await appendFaultInjector?.();
+        await fh.writeFile(line, "utf8");
+        return { size: size + bytes };
+      } finally {
+        await fh.close();
       }
-      if (fh) {
-        try {
-          ({ size } = await fh.stat());
-          if (size > 0) {
-            const last = Buffer.alloc(1);
-            await fh.read(last, 0, 1, size - 1);
-            if (last[0] !== 0x0a) size = await truncateTornTail(fh, size);
-          }
-        } finally {
-          await fh.close();
-        }
-      }
-      await appendFaultInjector?.();
-      await appendFile(file, line, { encoding: "utf8", mode: FILE_MODE });
-      return { size: size + bytes };
     }),
   );
+}
+
+// Long-running writers can keep one O_APPEND handle open while preserving the
+// same per-file serialization and torn-tail healing as appendNdjson. Appends
+// queued in the same turn share one write; each caller resolves only after the
+// batch containing its complete line is on disk.
+export async function openNdjsonAppender(file) {
+  await mkdir(path.dirname(file), { recursive: true, mode: DIR_MODE });
+  const key = path.resolve(file);
+  const { fh } = await withAppendLock(key, () => retryTransient(() => openCleanAppendHandle(file)));
+  let closed = false;
+  const queue = [];
+  let flushTask = null;
+
+  const ensureFlush = () => {
+    if (flushTask) return;
+    flushTask = (async () => {
+      // Let all currently-running workers enqueue before taking the batch.
+      await new Promise((resolve) => queueMicrotask(resolve));
+      while (queue.length > 0) {
+        const batch = queue.splice(0);
+        try {
+          const body = batch.map((item) => item.line).join("");
+          await withAppendLock(key, () =>
+            retryTransient(async () => {
+              await appendFaultInjector?.();
+              await fh.writeFile(body, "utf8");
+            }),
+          );
+          for (const item of batch) item.resolve();
+        } catch (err) {
+          for (const item of batch) item.reject(err);
+        }
+      }
+    })().finally(() => {
+      flushTask = null;
+      if (queue.length > 0) ensureFlush();
+    });
+  };
+
+  return {
+    append(obj) {
+      if (closed) return Promise.reject(new Error("NDJSON appender is closed"));
+      const line = JSON.stringify(obj) + "\n";
+      return new Promise((resolve, reject) => {
+        queue.push({ line, resolve, reject });
+        ensureFlush();
+      });
+    },
+    async close() {
+      if (closed) return;
+      closed = true;
+      while (flushTask) await flushTask;
+      await withAppendLock(key, () => fh.close());
+    },
+  };
 }
 
 // Streamed NDJSON reader. filter applies first, then offset/limit count

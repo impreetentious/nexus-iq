@@ -1,6 +1,4 @@
-// Engine-hardening regression suite (deep empirical review). Pins,
-// red-first, nine confirmed engine/store/object bugs that survived the first
-// concurrency sweep (engine-robustness.test.js covers the earlier five):
+// Engine, store, monitor, and object-boundary hardening regressions:
 //
 //   1  forEachUnit stops EVERY worker when one fn throws — no paid provider
 //      calls dispatched after the first throw, the error propagates with its
@@ -151,7 +149,7 @@ function routeHandler(routes, method, pattern) {
 // 1 — forEachUnit stops the whole pool on a throw (no runaway paid calls)
 // =============================================================================
 
-test("fix 1: a worker fn throwing stops every worker — no units dispatched after the throw, the error propagates with its code", async (t) => {
+test("a worker fn throwing stops every worker and preserves the error code", async (t) => {
   resetMock();
   t.after(resetMock);
   const slug = "stop-on-throw";
@@ -209,7 +207,7 @@ test("fix 1: a worker fn throwing stops every worker — no units dispatched aft
   );
 });
 
-test("fix 1: concurrency 1 → the throw stops dispatch at exactly the failing unit (tight bound)", async (t) => {
+test("at concurrency 1 a throw stops dispatch at exactly the failing unit", async (t) => {
   resetMock();
   t.after(resetMock);
   const slug = "stop-on-throw-c1";
@@ -241,7 +239,7 @@ test("fix 1: concurrency 1 → the throw stops dispatch at exactly the failing u
 // 2 — a drift re-judge fault never cascades through the worker pool
 // =============================================================================
 
-test("fix 2: a PAUSE-class fault inside the drift re-judge pauses the run resumably (not failed, not a pool rejection)", async (t) => {
+test("a pause-class drift re-judge fault pauses the run resumably", async (t) => {
   resetMock();
   t.after(resetMock);
   const slug = "drift-pause";
@@ -306,7 +304,7 @@ test("fix 2: a PAUSE-class fault inside the drift re-judge pauses the run resuma
   assert.equal(lines.length, N, "exactly-once outputs across the drift pause + resume");
 });
 
-test("fix 2: a NON-pause fault inside the drift re-judge warns and the run CONTINUES to completion", async (t) => {
+test("a non-pause drift re-judge fault warns and the run completes", async (t) => {
   resetMock();
   t.after(resetMock);
   const slug = "drift-continue";
@@ -359,7 +357,7 @@ test("fix 2: a NON-pause fault inside the drift re-judge warns and the run CONTI
 // 3 — quarantine cleared when a unit succeeds on resume
 // =============================================================================
 
-test("fix 3: a unit quarantined in session 1 that SUCCEEDS on resume is removed from run.quarantine (and has a verdict line)", async (t) => {
+test("a quarantined unit that succeeds on resume is removed from run.quarantine", async (t) => {
   resetMock();
   t.after(resetMock);
   const slug = "quar-cleared";
@@ -430,7 +428,7 @@ test("fix 3: a unit quarantined in session 1 that SUCCEEDS on resume is removed 
 // 4 — appendNdjson serializes heal+append (no co-writer truncation)
 // =============================================================================
 
-test("fix 4: appendNdjson serializes heal+append per file — concurrent appends to one torn-tail file never overlap their critical section (and all survive)", async (t) => {
+test("appendNdjson serializes heal+append per file and preserves concurrent lines", async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-append-race-"));
   t.after(() => rm(dir, { recursive: true, force: true }).catch(() => {}));
   t.after(() => store.__setAppendFaultInjector(null));
@@ -514,7 +512,7 @@ test("fix 4: appendNdjson serializes heal+append per file — concurrent appends
 // 5 — pricingFor warns on a priced-provider catalog failure (no silent $0)
 // =============================================================================
 
-test("fix 5: a catalog failure for a PRICED provider surfaces a 'cost tracking unavailable' warning (metering still proceeds)", async (t) => {
+test("a priced-provider catalog failure surfaces a cost-tracking warning", async (t) => {
   resetMock();
   t.after(resetMock);
   const slug = "pricing-warn";
@@ -560,7 +558,7 @@ test("fix 5: a catalog failure for a PRICED provider surfaces a 'cost tracking u
   );
 });
 
-test("fix 5: a genuinely-free LOCAL provider ($0 catalog) prices $0 WITHOUT a spurious warning", async (t) => {
+test("a genuinely free local provider prices at zero without a spurious warning", async (t) => {
   resetMock();
   t.after(resetMock);
   const slug = "pricing-local-ok";
@@ -587,7 +585,7 @@ test("fix 5: a genuinely-free LOCAL provider ($0 catalog) prices $0 WITHOUT a sp
 // 6 — escalation.count re-derived from persisted finals on resume
 // =============================================================================
 
-test("fix 6: resume re-derives escalation.count from the persisted escalated finals (a lost live increment self-heals)", async (t) => {
+test("resume re-derives escalation.count from persisted escalated finals", async (t) => {
   resetMock();
   t.after(resetMock);
   const slug = "esc-recount";
@@ -650,7 +648,7 @@ test("fix 6: resume re-derives escalation.count from the persisted escalated fin
 // 7 — monitor warnings are ring-buffer capped
 // =============================================================================
 
-test("fix 7: monitor warnings stay bounded under a flood; the most recent are retained and the drop count is surfaced", () => {
+test("monitor warnings stay bounded and retain the most recent entries", () => {
   const runId = "ring-buffer-run";
   monitor.track(runId, { total: 10_000 });
   const FLOOD = 5_000;
@@ -681,7 +679,7 @@ test("fix 7: monitor warnings stay bounded under a flood; the most recent are re
   monitor.clearRun(runId);
 });
 
-test("fix 7: a modest warning count is untouched — warningsDropped stays absent (shape unchanged for the common case)", () => {
+test("a modest warning count preserves the common response shape", () => {
   const runId = "ring-buffer-small";
   monitor.track(runId, { total: 10 });
   for (let i = 0; i < 5; i++) monitor.warn(runId, { kind: "quarantine", message: `m${i}` });
@@ -699,7 +697,7 @@ test("fix 7: a modest warning count is untouched — warningsDropped stays absen
 // 8 — reserved-slug bypass closed
 // =============================================================================
 
-test("fix 8: an EXPLICIT reserved Windows device-name slug is rejected VALIDATION (the regex used to pass it through)", () => {
+test("an explicit reserved Windows device-name slug is rejected", () => {
   for (const bad of ["con", "aux", "nul", "prn", "com1", "lpt9"]) {
     assert.throws(
       () => createProject({ name: "Whatever", slug: bad }),
@@ -719,7 +717,7 @@ test("fix 8: an EXPLICIT reserved Windows device-name slug is rejected VALIDATIO
 // 9 — createProjectIfAbsent is atomic (no check-then-act race)
 // =============================================================================
 
-test("fix 9: two concurrent POSTs for the same slug → exactly one succeeds, the other gets a clean VALIDATION (no clobber)", async () => {
+test("two concurrent project creates for one slug produce one clean winner", async () => {
   const handler = routeHandler(projectsRoutes, "POST", "/api/projects");
   const body = { name: "Race Project", slug: "race-project", privacyMode: "open" };
 
@@ -744,7 +742,7 @@ test("fix 9: two concurrent POSTs for the same slug → exactly one succeeds, th
   assert.equal(onDisk.slug, "race-project");
 });
 
-test("fix 9: createProjectIfAbsent refuses a present-but-corrupt bundle instead of overwriting it", async () => {
+test("createProjectIfAbsent refuses a corrupt existing bundle", async () => {
   const slug = "corrupt-bundle";
   const dir = projectDir(slug);
   await mkdir(dir, { recursive: true });
