@@ -62,5 +62,5 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Docker smoke (build + /api/health)
+      - name: Docker smoke (build + persisted state)
         run: npm run docker:smoke

@@ -26,5 +26,10 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+*.bak
+*.orig
+*.rej
+.cache/
+.eslintcache
 test-results/
 playwright-report/

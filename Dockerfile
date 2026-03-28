@@ -18,6 +18,7 @@ COPY --from=builder --chown=node:node /app/.next ./.next
 COPY --from=builder --chown=node:node /app/pages ./pages
 COPY --from=builder --chown=node:node /app/server ./server
 COPY --from=builder --chown=node:node /app/demo ./demo
+RUN mkdir -p projects vaults config && chown node:node projects vaults config
 USER node
 # runtime needs production deps only (next/react/parsers); devDependencies are
 # build-time

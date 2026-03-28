@@ -1,7 +1,6 @@
 # Optional local runtime for the public Nexus IQ app.
-# Named volumes persist project bundles and provider config across container
-# recreation — without them, `docker compose down` (or a rebuild) discards all
-# projects, saved keys, and settings.
+# Named volumes persist project bundles, PII re-identification vaults, and
+# provider config across container recreation.
 services:
   app:
     build: .
@@ -12,6 +11,7 @@ services:
     command: npm run start:docker
     volumes:
       - projects:/app/projects
+      - vaults:/app/vaults
       - config:/app/config
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
@@ -22,4 +22,5 @@ services:
 
 volumes:
   projects:
+  vaults:
   config:

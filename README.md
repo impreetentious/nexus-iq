@@ -79,6 +79,19 @@ npm test
 npm run test:a11y
 ```
 
+Run the repository checks with:
+
+```bash
+npm run check:version
+npm run format:check
+npm run lint
+npm run build
+npm test
+npm run test:a11y
+npm audit --audit-level=high
+npm run docker:smoke
+```
+
 Useful targeted checks:
 
 ```bash
@@ -93,7 +106,7 @@ node --test tests/sim/dsl.sim.test.js
 docker compose up --build
 ```
 
-Then open `http://localhost:3000`. The image includes `demo/` for the documented walkthrough. The Compose file mounts named volumes for `projects/` and `config/`, so project bundles, saved provider keys, and settings survive `docker compose down` and container rebuilds. Only port 3000 is published — the backend binds `127.0.0.1` inside the container and the Next.js shell proxies `/api` to it. To start clean, remove the volumes with `docker compose down -v`.
+Then open `http://localhost:3000`. The image includes `demo/` for the documented walkthrough. The Compose file mounts named volumes for `projects/`, `vaults/`, and `config/`, so project bundles, PII re-identification maps, saved provider keys, and settings survive `docker compose down` and container rebuilds. Only port 3000 is published — the backend binds `127.0.0.1` inside the container and the Next.js shell proxies `/api` to it. To start clean, remove the volumes with `docker compose down -v`.
 
 ## Notes
 
@@ -109,4 +122,4 @@ MIT © Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v2.10.0
+**Version:** v2.10.1

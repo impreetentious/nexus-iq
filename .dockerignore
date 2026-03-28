@@ -8,6 +8,8 @@ config/*
 !config/.gitkeep
 projects/*
 !projects/.gitkeep
+vaults/*
+!vaults/.gitkeep
 tests/
 *.log
 npm-debug.log*
@@ -26,3 +28,6 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+.cache/
+test-results/
+playwright-report/

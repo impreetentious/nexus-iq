@@ -4,9 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  # The tag trigger was the only trigger, so this job had never run once across
-  # 44 versioned commits. Manual dispatch lets it be exercised without inventing
-  # a historical tag; it requires the tag to already exist and to be checked out.
   workflow_dispatch:
     inputs:
       tag:
@@ -33,7 +30,6 @@ jobs:
       - run: npm ci
       - run: npm run check:version
 
-      # A mistyped tag must fail here, not after a release object already exists.
       - name: Assert the tag matches package.json
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
@@ -45,15 +41,15 @@ jobs:
           fi
           echo "tag $RELEASE_TAG matches package.json"
 
+      - run: npm run format:check
+      - run: npm run lint
       - run: npm run build
       - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:a11y
+      - run: npm audit --audit-level=high
+      - run: npm run docker:smoke
 
-      # Notes are generated from the commits in the tag range. This repo keeps no
-      # README changelog — the commit history is the release record, matching every
-      # sibling repo. On the first-ever release there is no previous tag to diff
-      # against, so the notes enumerate the whole history; that is accepted rather
-      # than pinned with --notes-start-tag, which would need a tag that does not
-      # exist yet.
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
