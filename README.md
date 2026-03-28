@@ -101,6 +101,7 @@ Then open `http://localhost:3000`. The image includes `demo/` for the documented
 - Project bundles are file-based and portable, optimized for practical local use rather than large-scale hosted deployment.
 - Replication exports include machine-readable artifacts plus generated R and Python helpers for external verification.
 - The Next.js shell and local UI send a same-origin Content Security Policy, plus `nosniff`, `SAMEORIGIN`, strict referrer policy, and a restricted permissions policy.
+- The GitHub remote is authoritative and carries the only pipelines: `.github/workflows/ci.yml` runs every gate and `release.yml` publishes on a tag. The GitLab remote is a backup mirror kept in sync, deliberately without a `.gitlab-ci.yml` — this app is server-rendered rather than a static export, so there is no GitLab Pages target to gate, and a mirrored pipeline would only create a second place for gate drift.
 
 ## License
 
@@ -108,4 +109,4 @@ MIT © Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v2.9.0
+**Version:** v2.9.1
