@@ -25,5 +25,5 @@ A **support bundle** (Settings → Diagnostics) is for triage only — it redact
 
 ## Compatibility
 
-- Project bundles are forward-compatible within a major product line when `project.json` parses.
+- Restore with the same Nexus IQ version that created the backup, then upgrade normally. Keep the original backup until the restored project has opened successfully.
 - Support-bundle `bundleFormat` is independent of project schema; do not feed a support zip back into `projects/`.

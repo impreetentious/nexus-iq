@@ -20,6 +20,7 @@ import path from "node:path";
 import { unzipSync, strFromU8 } from "fflate";
 
 import { startServer } from "../../server/index.js";
+import { updateProject } from "../../server/core/store.js";
 
 let tmpProjects, tmpConfig, tmpVaults, srv, base;
 
@@ -85,6 +86,8 @@ test("GET /api/diagnostics returns the ok envelope with system fields + bundleFo
 // error message or a ledger payload someday.
 const PLANTED_KEY = "sk-live-plantedSUPERSECRETtoken9c8b7a5432";
 const PLANTED_VAULT_SECRET = "leaked-original-string@example.com";
+const PLANTED_HOME_PATH = path.join(os.homedir(), "nexus-iq-private", "trace.log");
+const plantedDataPath = () => path.join(tmpProjects, "private", "trace.log");
 
 test("support bundle: MANIFEST + members present, redaction holds against a planted key + vault file", async () => {
   // 1. create a project through the real API
@@ -95,6 +98,22 @@ test("support bundle: MANIFEST + members present, redaction holds against a plan
   assert.equal(created.status, 200, `create → ${created.status}: ${created.text?.slice(0, 200)}`);
   assert.equal(created.json?.ok, true);
   const slug = created.json.data.slug;
+
+  // A token-shaped value and a home path can leak through ordinary strings
+  // such as project names or persisted run errors, not only sensitive keys.
+  await updateProject(slug, (project) => {
+    project.name = `Diagnostic Probe ${PLANTED_KEY}`;
+    project.runs = [
+      {
+        id: "run_probe",
+        status: "failed",
+        error: {
+          code: "PROBE",
+          message: `failure at ${PLANTED_HOME_PATH}; data at ${plantedDataPath()}`,
+        },
+      },
+    ];
+  });
 
   // 2. plant a fake provider key in config/keys.json — the support bundle
   //    MUST NOT open this file
@@ -157,6 +176,8 @@ test("support bundle: MANIFEST + members present, redaction holds against a plan
       !text.includes(importedSecret),
       `member ${name} must not contain .imports staging contents`,
     );
+    assert.ok(!text.includes(PLANTED_HOME_PATH), `member ${name} must not contain a home path`);
+    assert.ok(!text.includes(plantedDataPath()), `member ${name} must not contain a data path`);
   }
 
   // 7. no member LIVES under vault/, .imports/, or is named keys.json

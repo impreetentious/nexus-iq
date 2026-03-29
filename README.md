@@ -14,7 +14,7 @@ Two processes start together:
 - The **Next.js shell** on port `3000` is an iframe host and an `/api/*` proxy. It renders no application UI of its own.
 - The **backend** on port `7341` (plain `node:http`, no framework) serves the real interface — vanilla JavaScript under `public/app/` — and every API. It binds loopback only.
 
-Your work lives on disk in file-based project bundles under `projects/<slug>/`, which are gitignored and portable: copy the directory to move a project to another machine.
+Project data and provenance live in file-based bundles under `projects/<slug>/`, which are gitignored and portable. If a corpus was pseudonymized, copy the matching `vaults/<slug>/` directory separately when you need to preserve re-identification.
 
 Supported corpus inputs: CSV, XLSX, DOCX, PDF, and transcript formats.
 
@@ -40,7 +40,7 @@ Nexus IQ supports:
 - Ollama
 - MockModel
 
-Keys are stored in `config/keys.json`, which is gitignored and excluded from every export, diagnostic bundle and backup.
+Keys are stored in `config/keys.json`, which is gitignored and excluded from project exports and diagnostic bundles. Include `config/` only in a private backup you control.
 
 ## Privacy & PII Handling
 
@@ -122,4 +122,4 @@ MIT © Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v2.10.2
+**Version:** v2.10.3

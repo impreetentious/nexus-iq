@@ -2,7 +2,7 @@
 
 ## Purpose
 
-A support bundle is a **diagnostic snapshot** for debugging. It is **not** a backup or restore archive. Restoring a study means copying `projects/` and `config/` (see `docs/backup-restore.md`).
+A support bundle is a **diagnostic snapshot** for debugging. It is **not** a backup or restore archive. Restoring a study means copying `projects/`, `vaults/`, and `config/` (see [Backup and restore](backup-restore.md)).
 
 ## Bundle format
 
@@ -30,4 +30,4 @@ A support bundle is a **diagnostic snapshot** for debugging. It is **not** a bac
 
 **Privacy cues:** the archive README states that keys and vaults are excluded, and that the zip is not restore-capable.
 
-Redaction policy version: `1` (embedded in `MANIFEST.json` as `redactionPolicy`).
+Redaction policy version: `2` (embedded in `MANIFEST.json` as `redactionPolicy`).

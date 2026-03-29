@@ -83,7 +83,7 @@ function dropTarget(mount, params, teardown = []) {
     type: "file",
     class: "sr-only",
     id: "import-file",
-    accept: ".csv,.tsv,.xlsx,.docx,.pdf,.txt,.vtt,.srt,.json",
+    accept: ".csv,.tsv,.xlsx,.xls,.docx,.pdf,.txt,.md,.html,.vtt,.srt,.json",
     onchange: (e) => {
       const file = e.target.files?.[0];
       if (file) beginUpload(mount, params, file, teardown);
@@ -109,7 +109,7 @@ function dropTarget(mount, params, teardown = []) {
     emptyState({
       mark: "⇣",
       title: "Drop a file anywhere.",
-      body: "CSV, XLSX, DOCX, PDF, plain text, VTT/SRT transcripts, or transcript JSON. Nexus IQ proposes the column mapping; you can edit it before confirming.",
+      body: "CSV/TSV, XLS/XLSX, DOCX, PDF, TXT/Markdown/HTML, VTT/SRT transcripts, or transcript JSON. Nexus IQ proposes the column mapping; you can edit it before confirming.",
       hint: "Files parse locally. Nothing leaves this machine at import.",
       actions: [el("label", { class: "btn btn--primary", for: "import-file" }, "Choose a file…")],
     }),
@@ -377,7 +377,7 @@ function renderSheet(mount, params, proposal, file, teardown = []) {
     {
       mode: "pseudonymize",
       label: "Pseudonymize",
-      hint: "Replaces identifiers in unit text and metadata columns before any model call: jane.doe@example.com becomes [EMAIL_1]. Originals stay in a local vault file inside this project's folder — excluded from every Nexus IQ export, but it travels if you copy the folder by hand; delete vault\\ first to share masked-only.",
+      hint: "Replaces identifiers in unit text and metadata columns before any model call: jane.doe@example.com becomes [EMAIL_1]. Originals stay in a separate local vault under vaults/<project>/, outside the project folder and excluded from project exports. Keep that vault private; omit it when sharing masked-only data.",
     },
     {
       mode: "off",

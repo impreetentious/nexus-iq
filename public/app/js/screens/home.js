@@ -36,7 +36,7 @@ export function render(mount) {
         screenHead({
           overline: "Nexus IQ",
           title: "Projects",
-          lede: "Each project is a portable folder containing its corpus, codebook, instruments, gold, and ledger. Copy the folder to copy the whole study.",
+          lede: "Each project is a portable folder containing its corpus, codebook, instruments, gold, and ledger. PII re-identification maps stay separate under vaults/.",
           actions: [
             el(
               "button",

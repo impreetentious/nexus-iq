@@ -19,6 +19,7 @@
 // leaf ("apiKey", "secret", "token", …) with "[REDACTED]" as defense in
 // depth — project.json today has no such fields.
 import path from "node:path";
+import os from "node:os";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { zipSync, strToU8 } from "fflate";
@@ -36,7 +37,7 @@ export const BUNDLE_FORMAT = 1;
 
 // Redaction policy version — bump when the field-name scrub, the never-
 // included list, or the includeOutputs cap changes semantics.
-const REDACTION_POLICY_VERSION = 1;
+const REDACTION_POLICY_VERSION = 2;
 
 // Cap on ledger-tail.ndjson: last N events, chain-verified by
 // ledger-verify.json.
@@ -50,10 +51,44 @@ const OUTPUTS_SAMPLE_MAX = 50;
 // object keys during a recursive walk (see sanitize below).
 const SENSITIVE_KEY_RE =
   /(apikey|api_key|secret|password|passwd|token|credential|bearer|authorization|private[_-]?key)/i;
+const USER_HOME = os.homedir();
+const LOCAL_PATH_PREFIXES = [
+  USER_HOME,
+  repoRoot,
+  process.env.NEXUS_IQ_PROJECTS_DIR,
+  process.env.NEXUS_IQ_VAULTS_DIR,
+  process.env.NEXUS_IQ_CONFIG_DIR,
+]
+  .filter((value) => typeof value === "string" && value.length > 1)
+  .map((value) => path.resolve(value))
+  .sort((a, b) => b.length - a.length);
+const VALUE_REDACTIONS = [
+  [/\bsk-[A-Za-z0-9_-]{16,}\b/g, "[REDACTED]"],
+  [/\bAKIA[0-9A-Z]{16}\b/g, "[REDACTED]"],
+  [/\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, "[REDACTED]"],
+  [/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, "[REDACTED]"],
+  [/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [REDACTED]"],
+  [/(https?:\/\/)[^/\s:@]+:[^@\s/]+@/gi, "$1[REDACTED]@"],
+  [
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+    "[REDACTED PRIVATE KEY]",
+  ],
+];
 
-// Recursive scrub — arrays are mapped, objects have every sensitive-keyed
-// leaf replaced by "[REDACTED]" (the whole subtree is dropped, not just
-// stringified), scalars pass through. Idempotent.
+function sanitizeString(value) {
+  let out = value;
+  for (const prefix of LOCAL_PATH_PREFIXES) {
+    out = out.replaceAll(prefix, prefix === path.resolve(USER_HOME) ? "[HOME]" : "[LOCAL_PATH]");
+  }
+  for (const [pattern, replacement] of VALUE_REDACTIONS) {
+    out = out.replace(pattern, replacement);
+  }
+  return out;
+}
+
+// Recursive scrub: sensitive-keyed subtrees are dropped, while strings are
+// scanned for token-shaped values, credential-bearing URLs, private keys, and
+// the current user's home path. Idempotent.
 function sanitize(value) {
   if (Array.isArray(value)) return value.map(sanitize);
   if (value !== null && typeof value === "object") {
@@ -63,6 +98,7 @@ function sanitize(value) {
     }
     return out;
   }
+  if (typeof value === "string") return sanitizeString(value);
   return value;
 }
 
@@ -150,7 +186,7 @@ WHAT IS NEVER INCLUDED
   - config/keys.json (raw provider API keys)
   - vaults/<slug>/ (PII re-identification vault, stored outside the project bundle)
   - projects/<slug>/.imports/ staging with raw uploads
-  - absolute filesystem paths (would leak $HOME on this machine)
+  - local data-root and home-directory paths
   - full run outputs beyond the optional 50-line sample above
 
 BUNDLE COMPATIBILITY
@@ -159,8 +195,8 @@ BUNDLE COMPATIBILITY
 
 RESTORE
   This bundle CANNOT restore a project. To back up or restore Nexus IQ,
-  copy the projects/, vaults/, and config/ directories verbatim while the server is
-  stopped. See docs/backup-restore.md.
+  copy the projects/, vaults/, and config/ directories verbatim while the
+  server is stopped. See docs/backup-restore.md.
 `;
 
 export default [
@@ -216,15 +252,16 @@ export default [
         },
       };
 
+      const sanitizedDiagnostics = sanitize(diagnostics);
       const sanitizedProject = sanitize(project);
       const ledgerVerify = await ledger.verify(pdir);
-      const ledgerTail = await readLedgerTail(pdir, LEDGER_TAIL_MAX);
-      const runsSummary = (project.runs ?? []).map(runSummary);
+      const ledgerTail = sanitize(await readLedgerTail(pdir, LEDGER_TAIL_MAX));
+      const runsSummary = sanitize((project.runs ?? []).map(runSummary));
 
       // members map: relative path → utf8 string content
       const members = new Map();
       members.set("README.txt", README_TXT);
-      members.set("diagnostics.json", JSON.stringify(diagnostics, null, 2) + "\n");
+      members.set("diagnostics.json", JSON.stringify(sanitizedDiagnostics, null, 2) + "\n");
       members.set("project.json", JSON.stringify(sanitizedProject, null, 2) + "\n");
       members.set("ledger-verify.json", JSON.stringify(ledgerVerify, null, 2) + "\n");
       members.set("ledger-tail.ndjson", ndjsonBody(ledgerTail));
@@ -246,7 +283,7 @@ export default [
           // against a future caller passing an unvalidated id.
           const outputsFile = runOutputsFile(project.slug, pick.id);
           try {
-            const rows = await readNdjson(outputsFile, { limit: OUTPUTS_SAMPLE_MAX });
+            const rows = sanitize(await readNdjson(outputsFile, { limit: OUTPUTS_SAMPLE_MAX }));
             members.set(`outputs-sample-${pick.id}.ndjson`, ndjsonBody(rows));
           } catch {
             // no outputs on disk yet (pending run, aborted before first
