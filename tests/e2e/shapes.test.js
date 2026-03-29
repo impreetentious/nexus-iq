@@ -491,7 +491,7 @@ test("instantread.js: lengthHist is {bins, unit} (NOT an array), langMix an obje
 
   assert.equal(typeof r.computedAt, "string", "computedAt cache marker");
 
-  // the CTA price (design §6.1: the level-up affordance always states its
+  // the CTA price (the level-up affordance always states its
   // price): briefEstimate is {usd, etaMin} | null — null only when no
   // Director slot is configured. This harness configured the mock Director
   // before importing, so the brief is priced (at mock's $0).
@@ -1230,7 +1230,7 @@ test("workbench.js: model spec {x, family} → results {family, outcome, estimat
   assert.equal(r.nUnits, undefined, "n, not nUnits");
 });
 
-test("workbench.js: subgroup audit (design §6.7) → results {by, overall {goldN, percentAgreement, kappa, errorRate}, groups [{group, n, dist, goldN, percentAgreement, kappa, errorRate, flagged}]} — agreement by group, flagged >0.1 below overall", async () => {
+test("workbench.js: subgroup audit → results {by, overall {goldN, percentAgreement, kappa, errorRate}, groups [{group, n, dist, goldN, percentAgreement, kappa, errorRate, flagged}]} — agreement by group, flagged >0.1 below overall", async () => {
   const a = await ok("POST", `/api/projects/${S.slug}/analyses`, {
     kind: "subgroup",
     spec: { instrumentId: S.judgeInstId, by: "dept" },
@@ -1564,8 +1564,7 @@ test("questionbar (main.js plan sheet): ask → {planId, plan {constructs, instr
     assert.equal(typeof i.workerClass, "string");
     assert.equal(typeof i.provider, "string");
     assert.equal(typeof i.model, "string");
-    // flagged in the audit report: the live spec carries NO name/kind —
-    // main.js renders blanks for those two reads
+    // The live spec intentionally carries no name/kind fields.
     assert.equal(i.name, undefined);
     assert.equal(i.kind, undefined);
   }

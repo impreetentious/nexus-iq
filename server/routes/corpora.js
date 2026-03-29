@@ -355,7 +355,7 @@ async function computeColumns(slug, corpusId, corpus) {
 
 // ----------------------------------------------------- the brief's price tag
 
-// Design §6.1: the level-up affordance always states its price. The Instant
+// The level-up affordance always states its price. The Instant
 // Read's one CTA is the Corpus Brief, so the response carries briefEstimate
 // {usd, etaMin} — or null when no Director slot is configured (there is no
 // honest price to quote). Estimated with costs.estimateRun in the brief's
@@ -488,7 +488,7 @@ export default [
   {
     // Fix a wrong text-column choice WITHOUT re-import: build a NEW corpus
     // whose unit text is the chosen metadata column, preserving the old text
-    // under its original column name (design §6.2 — re-unitization versions
+    // under its original column name (re-unitization versions
     // the corpus; the original is never touched).
     method: "POST",
     pattern: "/api/projects/:p/corpora/:c/reunitize",

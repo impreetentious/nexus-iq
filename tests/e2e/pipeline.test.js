@@ -1,4 +1,4 @@
-// Task J — the release gate. The First Five Minutes and the whole Evidence
+// End-to-end release acceptance. The first-use flow and the whole Evidence
 // Ladder, driven END TO END through HTTP against the real server (port 0),
 // keyless: MockModel is both the Director (scripted via [[handler:pipeline]])
 // and the worker (oracle wired to demo/oracle.json's planted theme flags).

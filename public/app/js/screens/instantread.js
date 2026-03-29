@@ -12,7 +12,7 @@
 //   sentimentSketch: {lexicon: "VADER", positive, negative, neutral, meanValence}
 //   sentimentUnits:  {positive: {n, unitIds}, neutral: …, negative: …}
 //   metaMarginals:   [{column, values: [{value, n, unitIds}]}]
-//   briefEstimate:   {usd, etaMin} | null — the CTA's price tag (design §6.1:
+//   briefEstimate:   {usd, etaMin} | null — the CTA's price tag (the
 //                    the level-up affordance always states its price); null
 //                    only when no Director slot is configured
 //   computedAt:      ISO timestamp (also the cache marker)

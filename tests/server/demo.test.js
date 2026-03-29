@@ -112,10 +112,7 @@ test("reset creates the demo project, ingests the sampled CSV, and returns the g
     "sampleRows: 5 → five units on disk (the CSV's response column is non-empty for these rows)",
   );
   assert.equal(data.skipped, 0, "no empty response cells in the sampled slice");
-  assert.ok(
-    Array.isArray(data.steps) && data.steps.length > 0,
-    "the guided walkthrough carries next steps",
-  );
+  assert.equal(data.steps.length, 6, "the server steps align with all six guided-demo rows");
   for (const step of data.steps) assert.equal(typeof step, "string");
 
   // The project bundle exists with the pinned director slot.

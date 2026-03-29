@@ -16,17 +16,17 @@ Two processes start together:
 
 Project data and provenance live in file-based bundles under `projects/<slug>/`, which are gitignored and portable. If a corpus was pseudonymized, copy the matching `vaults/<slug>/` directory separately when you need to preserve re-identification.
 
-Supported corpus inputs: CSV, XLSX, DOCX, PDF, and transcript formats.
+Supported corpus inputs: CSV/TSV, XLS/XLSX, DOCX, PDF, TXT/Markdown/HTML, VTT/SRT, and transcript JSON.
 
 ## Demo Flow
 
-No API keys are required for a full local walkthrough.
+No API keys are required for a full local walkthrough. On the Projects screen, choose **Guided MockModel demo**, then **Reset & start demo**. This replaces the `techcorp-exit` demo project, imports the bundled corpus, and selects MockModel as the project Director.
 
-1. Create a project.
-2. Import `demo/techcorp-exit-survey.csv`.
-3. Review the automatic mapping and initial corpus scan.
-4. Generate a brief, draft constructs, and compile instruments.
-5. Run calibration and analysis using the built-in mock provider.
+1. Open Instant Read and review the local corpus summary.
+2. Generate a brief with the MockModel Director.
+3. Draft constructs and compile an instrument.
+4. Preview, calibrate, and run the instrument.
+5. Inspect the analysis and reproducibility artifacts.
 
 `MockModel` exists to make the full workflow usable out of the box. It is deterministic, local, and clearly labeled as mock output.
 
@@ -122,4 +122,4 @@ MIT © Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v2.10.3
+**Version:** v2.10.4

@@ -38,11 +38,12 @@ const DEMO_FILENAME = "techcorp-exit-survey.csv";
 // Guided next-steps returned alongside the fresh project — the UI walks the
 // researcher through the same happy-path a real study takes.
 const DEMO_STEPS = [
-  "Draft a construct from a corpus sample",
-  "Compile an instrument from the drafted construct",
-  "Preview the instrument against a handful of units",
-  "Freeze the instrument once agreement stabilizes",
-  "Kick off a MockModel run across the full corpus",
+  "The bundled corpus is imported and ready",
+  "Inspect columns and local summaries in Instant Read",
+  "Generate a corpus brief with the MockModel Director",
+  "Draft constructs from the corpus",
+  "Compile and preview an instrument",
+  "Preflight and run the instrument on MockModel",
 ];
 
 // Repo-root-relative path to the bundled CSV. Tests set NEXUS_IQ_PROJECTS_DIR
