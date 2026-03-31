@@ -91,7 +91,7 @@ export async function draftConstructs(project, themesOrQuestion, sampleUnits) {
 }
 
 // importCodebook(project, fileBuffer, kind) → proposed Construct[]
-// kind: "docx" | "pdf". Parsing goes through the Wave-1 ingest modules (they
+// kind: "docx" | "pdf". Parsing goes through the standard ingest modules (they
 // take file paths, so the buffer lands in an OS temp file for the duration).
 export async function importCodebook(project, fileBuffer, kind) {
   if (kind !== "docx" && kind !== "pdf") {

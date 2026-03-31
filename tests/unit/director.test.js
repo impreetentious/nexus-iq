@@ -1,4 +1,4 @@
-// Task F (Director half) — orchestration brain tests.
+// Director orchestration tests.
 //
 // Fully hermetic: every Director interaction is scripted through MockModel
 // handlers (mock.setHandler fires when the system message carries
@@ -799,7 +799,7 @@ test("compiler: workerClass scaffolding is enforced on the compiled template", a
   assert.equal(events[0].refs.constructId, construct.id);
 });
 
-// Field bug: reasoning-class workers (Gemini Flash via OpenRouter)
+// Reasoning-class workers (Gemini Flash via OpenRouter)
 // bill thinking tokens against max_tokens. The old class budgets (frontier
 // 512 / mid 384 / small 256) fit the rationale-first JSON alone, so MOST
 // judge calls truncated nondeterministically and quarantined. Budgets must
@@ -1002,7 +1002,7 @@ test("silver: tuning loop plateaus, records the curve, versions per iteration, a
   }
   // instrument.stability is the stability MODULE's append (stability.js:113);
   // the double injected here does not ledger, and silverTune must not
-  // re-append the event itself (BUG-1: double-counted stability runs).
+  // re-append the event itself (which would double-count stability runs).
   assert.equal(
     (await ledger.query(pdir, { type: "instrument.stability" })).length,
     0,
@@ -1079,7 +1079,7 @@ test("silver: stability failure leaves the level exploratory; missing engine/sta
   );
   // The verdict's ledger append belongs to the stability module (asserted
   // against the REAL module in runs.test.js); the double here does not
-  // ledger and silverTune must not re-append the event (BUG-1).
+  // ledger and silverTune must not re-append the event.
   const stEvents = await ledger.query(projectDir(project.slug), { type: "instrument.stability" });
   assert.equal(
     stEvents.length,
@@ -1344,12 +1344,11 @@ test("panels: strict mode offers only local candidates to the Director", async (
   assert.equal(new Set(rec.families).size, 3, "local families still disjoint");
 });
 
-// Same field bug as the compiler floor test above, panel edition:
+// Same truncation-floor case as the compiler test above, panel edition:
 // recommendPanel builds REAL juror payloads, so juror budgets must tolerate
 // reasoning-model thinking tokens too. The budgets must be the compiler's
-// exported CLASS_MAX_TOKENS — a private copy in panels.js is how the bug
-// shipped (compiler raised, panels stale, Gemini Flash jurors truncated and
-// quarantined silently).
+// exported CLASS_MAX_TOKENS so panel and compiler budgets cannot drift and
+// silently truncate reasoning-model jurors.
 test("panels: juror budgets are compiler's CLASS_MAX_TOKENS (small ≥1024, mid ≥1536, frontier ≥2048)", async () => {
   const compiler = await import("../../server/director/compiler.js");
   const canonical = compiler.CLASS_MAX_TOKENS;
@@ -1698,7 +1697,7 @@ test("NexusIQError is used for director-facing failures", async () => {
   }
 });
 
-// ---------------------------------------------------------------- truncation retry (February 2025 field bug)
+// ---------------------------------------------------------------- truncation retry
 
 // A real Director (Gemini Flash via OpenRouter) truncated the brief JSON at
 // maxTokens 4096 and the product hard-failed. Director calls now retry ONCE

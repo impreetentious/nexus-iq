@@ -36,12 +36,12 @@ import {
 // against max_tokens on most stacks (OpenRouter/Gemini/OpenAI reasoning
 // tiers). The old budgets (frontier 512 / mid 384 / small 256) fit the JSON
 // alone, so reasoning-class workers truncated MOST calls nondeterministically
-// and the engine quarantined them silently (February 2025 field bug). judgeUnit's
+// and the engine quarantined them silently. judgeUnit's
 // per-call truncation retry (ONE doubling, capped at 8192) covers the tail of
 // unusually long thinking; these floors cover the typical case.
 //
 // SINGLE OWNER: panels.js (real juror payloads) and questionbar.js (plan cost
-// estimates) import this — private copies are how the field bug shipped.
+// estimates) import this so the minimum cannot drift between call sites.
 export const CLASS_MAX_TOKENS = { frontier: 2048, mid: 1536, small: 1024 };
 
 // outputSchemaFor lives in the sibling server/instruments/judge.js (pinned:

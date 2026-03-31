@@ -1,4 +1,4 @@
-// Task F — panel aggregation tests. Pure functions, hand-checked numbers.
+// Panel aggregation tests. Pure functions, hand-checked numbers.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 

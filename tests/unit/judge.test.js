@@ -1,4 +1,4 @@
-// Task F — judge tests (prompt assembly, schema derivation, judgeUnit with
+// Judge tests (prompt assembly, schema derivation, judgeUnit with
 // MockModel + stub adapters). Hermetic: no network, no disk, $0.
 import { test } from "node:test";
 import assert from "node:assert/strict";

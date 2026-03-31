@@ -278,7 +278,7 @@ export function assemble(construct, judgePayload, unit) {
 // judgeUnit: one unit, one call (+ ≤2 schema repairs)
 // ---------------------------------------------------------------------------
 
-// Worker truncation cap (February 2025 field bug): reasoning-class workers
+// Worker truncation cap: reasoning-class workers
 // (Gemini Flash via OpenRouter) bill thinking tokens against max_tokens, so
 // the instrument's class budget can vanish before any JSON lands and the call
 // dies TRUNCATED — nondeterministically, because thinking length varies per
