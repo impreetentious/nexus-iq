@@ -1,7 +1,7 @@
 // Reporting layer tests: methods generator, replication archive, report canvas.
 //
 // The fixture is a REAL project bundle built programmatically in a temp dir
-// with the Wave-1 core modules (objects/store/ledger) and real statistics
+// with the core modules (objects/store/ledger) and real statistics
 // (agreement/correction), so every number the reporting layer cites is a
 // number Nexus IQ actually computed.
 import { test, after } from "node:test";
@@ -643,7 +643,7 @@ async function buildFixture() {
   });
   await saveProject(project, root);
 
-  // ---- ledger: the full provenance history per the Wave-1 taxonomy
+  // ---- ledger: the full provenance history
   const L = {};
   const ev = async (key, actor, type, refs, payload) => {
     L[key] = await ledger.append(projectDir, actor, type, refs, payload);

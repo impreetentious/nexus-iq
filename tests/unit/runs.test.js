@@ -1,4 +1,4 @@
-// Task F — run engine, stability, and monitor tests. Hermetic: MockModel
+// Run engine, stability, and monitor tests. Hermetic: MockModel
 // only (deterministic, $0), every project bundle in a per-test temp dir.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -983,7 +983,7 @@ test("monitor: drift tripwire warns when run-time agreement on gold drops below 
   assert.equal(drift[0].baseline, 1.0);
   assert.ok(
     !existsSync(path.join(projectsDir(), SLUG)),
-    "the drift re-judge must not write into the default projects dir (BUG-2: cache pollution under <repo>/projects)",
+    "the drift re-judge must not pollute the default projects dir cache",
   );
   assert.equal(
     monitor.runState(run.id),

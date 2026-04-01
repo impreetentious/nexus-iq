@@ -211,7 +211,7 @@ test("stability: never-silver-tuned judge passes → response {alpha, pass, leve
   assert.equal(persisted.stability.alpha, 1, "the summary still lands on the instrument");
   assert.equal(persisted.stability.n, N, "summary n is the actual sample size");
 
-  // fix 9a: the artifact records the compiled prompt the check actually ran
+  // The artifact records the compiled prompt the check actually ran.
   const art = JSON.parse(await readFile(artifactFile(S.instId), "utf8"));
   assert.equal(
     art.versionHash,

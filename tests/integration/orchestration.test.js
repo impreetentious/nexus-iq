@@ -1,30 +1,21 @@
-// Wave-2 integration: the REAL seam between F2 (server/director/*) and
-// F1 (server/runs/{engine,monitor}.js + server/instruments/{judge,panel,stability}.js).
-//
-// F2's unit suite proved silverTune against ENGINE DOUBLES; this file injects
-// the real modules (engine = server/runs/engine.js, stability =
-// server/instruments/stability.js) and runs the full loop — Director silver
+// Integration coverage for the seam between server/director/*,
+// server/runs/{engine,monitor}.js, and
+// server/instruments/{judge,panel,stability}.js. The suite runs the full loop:
+// Director silver
 // labels (MockModel handler via project.director.systemSuffix), real worker
 // judging through judge.assemble/judgeUnit/Pool/cache, real confusion-driven
 // rewrite, real stability promotion, real bundle persistence and ledger.
 //
-// Conventions copied from the unit suites:
-//   - hermetic bundles under a temp NEXUS_IQ_PROJECTS_DIR (F2 modules take no
-//     {dir} option — they resolve projectsDir() from the env var);
+// Conventions:
+//   - hermetic bundles under a temp NEXUS_IQ_PROJECTS_DIR;
 //   - one memoized MockAdapter shared with the modules under test
 //     (registry caches per provider+keysPath); handlers are namespaced per
 //     test, oracle/accuracy reset at each test head;
 //   - fixed project/construct ids wherever a seeded sample must be
 //     reproducible across runs (seededSample seeds on project.id).
 //
-// REGRESSION TESTS (formerly KNOWN-BUG TODOS, now fixed and asserted green):
-//   BUG-1  one stabilityCheck ledgers exactly ONE instrument.stability event —
-//          server/instruments/stability.js owns the append; silver.js no
-//          longer re-appends it.
-//   BUG-2  the monitor's drift tripwire re-judge runs against the run's
-//          bundle dir — armDriftTripwire accepts {dir} and driftTick forwards
-//          it to runEphemeral (no cache pollution under the default
-//          projects dir).
+// Regression coverage includes single-owner stability ledger events and the
+// drift tripwire's use of the run's explicit bundle directory.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
@@ -56,7 +47,7 @@ import { createRun, executeRun } from "../../server/runs/engine.js";
 import * as monitor from "../../server/runs/monitor.js";
 import * as stabilityMod from "../../server/instruments/stability.js";
 
-// F2 — the director side of the seam.
+// Director side of the seam.
 import { silverTune } from "../../server/director/silver.js";
 import { compileInstrument, acceptInstrument } from "../../server/director/compiler.js";
 import { makeEscalator } from "../../server/director/escalate.js";
@@ -169,7 +160,7 @@ function assertExactlyOnce(lines) {
 // (b) silverTune against the REAL engine and REAL stability module
 // =============================================================================
 
-let silverState = null; // consumed by the BUG-1 regression test below
+let silverState = null; // consumed by the ledger ownership regression below
 
 test("silverTune: real engine + real stability — loop runs, curve recorded, promotion fires, goldset persists with pi, ledger in order", async () => {
   const slug = "orch-silver";
@@ -332,7 +323,7 @@ test("silverTune: real engine + real stability — loop runs, curve recorded, pr
 
   // ---- ledger: taxonomy order + actor conventions. The stability module is
   // the sole owner of the instrument.stability append (stability.js:113);
-  // silver.js does not re-append it (BUG-1 fix) — exactly one event per check.
+  // silver.js does not re-append it — exactly one event per check.
   const pdir = projectDir(slug);
   const all = await ledger.query(pdir, {});
   const interesting = new Set([
@@ -374,7 +365,7 @@ test("silverTune: real engine + real stability — loop runs, curve recorded, pr
   silverState = { pdir, instrumentId: instrument.id };
 });
 
-test("BUG-1 regression: one stability check ledgers exactly ONE instrument.stability event (stability.js owns the append)", async () => {
+test("one stability check ledgers exactly one instrument.stability event (stability.js owns the append)", async () => {
   assert.ok(silverState, "depends on the silver integration test above");
   const events = await ledger.query(silverState.pdir, {
     type: "instrument.stability",
@@ -850,7 +841,7 @@ test("pipeline: compileInstrument (mock director) → createRun → executeRun +
   assert.equal(run.cost.estUSD, 0, "mock catalog pricing is $0");
   assert.equal(run.pinned, true);
 
-  // executeRun with the REAL F2 escalator wired into the F1 engine seam
+  // executeRun with the real Director escalator wired into the engine seam
   const escalate = makeEscalator(project, construct);
   let lastTick = null;
   const done = await executeRun(slug, run.id, {
@@ -1262,10 +1253,10 @@ test("concurrency: two concurrent executeRuns (judge pool-4 + dictionary) keep m
 });
 
 // =============================================================================
-// BUG-2 regression: the drift tripwire's re-judge honors the run's bundle dir
+// The drift tripwire's re-judge honors the run's bundle directory.
 // =============================================================================
 
-test("BUG-2 regression: the drift re-judge uses the run's bundle dir (armDriftTripwire {dir} → driftTick → runEphemeral), not the default projects dir", async (t) => {
+test("the drift re-judge uses the run's bundle dir (armDriftTripwire {dir} → driftTick → runEphemeral), not the default projects dir", async (t) => {
   const slug = "orch-driftdir";
   const bundleDir = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-orch-bundle-"));
   t.after(() => rm(bundleDir, { recursive: true, force: true }).catch(() => {}));

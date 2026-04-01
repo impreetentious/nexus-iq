@@ -12,7 +12,7 @@
 //      <model>", kind "alt" — riding the same generic pairwise loop (alt-vs-
 //      alt, alt-vs-retest, alt-vs-gold). Errored alts become a functional
 //      note; a different corpus yields no alt sources.
-//   3. No models field → artifact has NO alts key, response is wave-1 {alpha,
+//   3. No models field → artifact has NO alts key, response is the baseline {alpha,
 //      pass}; a failing alternate never sinks the check.
 //
 // Harness mirrors tests/server/retest-reliability.test.js: real server on an
@@ -189,7 +189,7 @@ const stabilityUrl = () => `/api/projects/${S.slug}/instruments/${S.instId}/stab
 const altKey = (m) => `alt:${S.instId}:${m.provider}/${m.model}`;
 
 // =========================================================================
-// (d) no models field → wave-1-identical response and artifact
+// (d) no models field → baseline-compatible response and artifact
 // =========================================================================
 
 test("stability without models: response is exactly {alpha, pass}; artifact carries NO alts key", async () => {
@@ -234,7 +234,7 @@ test("stability without models: response is exactly {alpha, pass}; artifact carr
   const r = await ok("POST", stabilityUrl(), { k: K, n: N, corpusId: S.corpusA });
   // the response grew the additive `level` field (the instrument's level
   // AFTER the check — tests/server/stability-honesty.test.js pins it);
-  // otherwise the wave-1 shape stands
+  // otherwise the baseline shape stands
   assert.deepEqual(
     Object.keys(r).sort(),
     ["alpha", "level", "pass"],
@@ -305,14 +305,14 @@ test("stability with two alternates: artifact alts label the same sampled units;
     }
   }
 
-  // the instrument's own stability summary: wave-1 fields plus corpusId
+  // the instrument's own stability summary: baseline fields plus corpusId
   // (the header chip links the right reliability matrix) — no alt leakage
   const p = await ok("GET", `/api/projects/${S.slug}`);
   const inst = p.instruments.find((i) => i.id === S.instId);
   assert.deepEqual(
     Object.keys(inst.stability).sort(),
     ["alpha", "corpusId", "k", "n", "ranAt"],
-    "instrument.stability summary shape: wave-1 + corpusId, no alt leakage",
+    "instrument.stability summary shape: baseline + corpusId, no alt leakage",
   );
   assert.equal(inst.stability.alpha, 1);
 });
@@ -419,7 +419,7 @@ test("reliability: stability artifact for a different corpus → no alt sources,
     rel.notes.includes(
       "A stability check exists for Pay judge on a different corpus. Run the stability check on this corpus to see rerun rows.",
     ),
-    `the wave-1 different-corpus note still stands (got ${JSON.stringify(rel.notes)})`,
+    `the baseline different-corpus note still stands (got ${JSON.stringify(rel.notes)})`,
   );
 });
 

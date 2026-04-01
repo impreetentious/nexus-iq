@@ -1,28 +1,27 @@
-// Run-integrity regression suite (accuracy sweep — RUN-ENGINE /
-// ANALYSES cluster). Pins, red-first:
-//   1  version-hash orphaning: exports/analyses/resume key final verdicts on
+// Run and analysis integrity regressions:
+//   - version-hash orphaning: exports/analyses/resume key final verdicts on
 //      run.versionHash (the hash the run STARTED under), not the unfrozen
 //      instrument's current hash.
-//   2  Director escalation crash path: an infrastructure fault inside the
+//   - Director escalation crash path: an infrastructure fault inside the
 //      second opinion PAUSES the run (resumable) instead of rejecting the
 //      worker pool; deterministic faults skip the second opinion and the run
 //      completes; a throw that escapes the engine before terminal persistence
 //      still settles the disk record (never stuck "running").
-//   3  run.error {code, message} persists on failed runs (the detail payload
+//   - run.error {code, message} persists on failed runs (the detail payload
 //      the client renders).
-//   4  corrected analyses distinguish raw shares from corrected cells —
+//   - corrected analyses distinguish raw shares from corrected cells —
 //      distribution entries carry corrected: false.
-//   5  quarantined units tick the live monitor: done reaches total.
-//   6  completed runs persist labelDist (calibration's planning-pe reads it).
-//   7  Director concurrence is stamped escalatedBy: "director-concurred" —
+//   - quarantined units tick the live monitor: done reaches total.
+//   - completed runs persist labelDist (calibration's planning-pe reads it).
+//   - Director concurrence is stamped escalatedBy: "director-concurred" —
 //      distinguishable from never-reviewed.
-//   8  evidence cells cap at 100 ids while results carry the TRUE n
+//   - evidence cells cap at 100 ids while results carry the TRUE n
 //      (distribution[*].n, triangulation divergentN).
-//  10  uncertainty-design gold never mints level "corrected" (π is nominal);
+//   - uncertainty-design gold never mints level "corrected" (π is nominal);
 //      the analysis carries a note saying so.
-//  11  continuous constructs render their declared scale bounds in the
+//   - continuous constructs render their declared scale bounds in the
 //      prompt and enforce them in the response schema.
-//  12  Director schema-repair attempts are metered (every attempt bills).
+//   - Director schema-repair attempts are metered (every attempt bills).
 //
 // Hermetic: MockModel only, bundles under a temp NEXUS_IQ_PROJECTS_DIR (route
 // handlers resolve the default projects dir from the env var).
@@ -220,7 +219,7 @@ async function plantGoldset(slug, { id, constructId, design, units, labelOf, pi 
 // 1 — version-hash orphaning
 // =============================================================================
 
-test("fix 1: instrument edit after a complete run — export.csv still carries labels, analyses still assemble rows, finalJurorOfRun pins run.versionHash", async () => {
+test("instrument edit after a complete run — export.csv still carries labels, analyses still assemble rows, finalJurorOfRun pins run.versionHash", async () => {
   const slug = "vh-export";
   const units = makeUnits(12);
   const { project } = await setup(slug, { units, instruments: [judgeInstrument()] });
@@ -271,7 +270,7 @@ test("fix 1: instrument edit after a complete run — export.csv still carries l
   assert.ok(Object.keys(analysis.results.distribution).length >= 1);
 });
 
-test("fix 1: resume after an edit sees done units (no re-billing) and writes every line under the run's original hash", async () => {
+test("resume after an edit sees done units (no re-billing) and writes every line under the run's original hash", async () => {
   const slug = "vh-resume";
   const N = 30;
   const { project, pdir } = await setup(slug, {
@@ -329,7 +328,7 @@ test("fix 1: resume after an edit sees done units (no re-billing) and writes eve
 // 2 — Director escalation crash path
 // =============================================================================
 
-test("fix 2a: a Director infrastructure fault (unpooled 429) pauses the run — resumable, persisted, the pool never rejects", async () => {
+test("a Director infrastructure fault (unpooled 429) pauses the run — resumable, persisted, the pool never rejects", async () => {
   const slug = "esc-pause";
   const units = makeUnits(20);
   units[7] = { ...units[7], text: "the one enormous unit about pay salary ".repeat(12) }; // ≫ p99 → escalates
@@ -372,7 +371,7 @@ test("fix 2a: a Director infrastructure fault (unpooled 429) pauses the run — 
   assert.equal(lines.find((l) => l.unitId === units[7].id).escalated, true);
 });
 
-test("fix 2a: a deterministic Director fault (SCHEMA_INVALID) skips the second opinion — worker verdict stands, run completes, warning recorded", async () => {
+test("a deterministic Director fault (SCHEMA_INVALID) skips the second opinion — worker verdict stands, run completes, warning recorded", async () => {
   const slug = "esc-skip";
   const units = makeUnits(20);
   units[7] = { ...units[7], text: "the one enormous unit about pay salary ".repeat(12) };
@@ -414,7 +413,7 @@ test("fix 2a: a deterministic Director fault (SCHEMA_INVALID) skips the second o
   );
 });
 
-test("fix 2b: a throw that escapes the engine before terminal persistence still settles the disk record at failed (never stuck running)", async () => {
+test("a throw that escapes the engine before terminal persistence still settles the disk record at failed (never stuck running)", async () => {
   const slug = "esc-backstop";
   const { project } = await setup(slug, { units: makeUnits(6), instruments: [judgeInstrument()] });
   mock.setAccuracy(1.0);
@@ -452,7 +451,7 @@ test("fix 2b: a throw that escapes the engine before terminal persistence still 
 // 3 — run.error persists into the detail payload
 // =============================================================================
 
-test("fix 3 (pin): a failed run persists run.error {code, message} in the project payload the detail screen reads", async (t) => {
+test("a failed run persists run.error {code, message} in the project payload the detail screen reads", async (t) => {
   const slug = "err-pin";
   const { project } = await setup(slug, { units: makeUnits(6), instruments: [judgeInstrument()] });
   mock.setAccuracy(1.0);
@@ -484,7 +483,7 @@ test("fix 3 (pin): a failed run persists run.error {code, message} in the projec
 // 4 — raw shares vs corrected cells: explicit provenance
 // =============================================================================
 
-test("fix 4: corrected descriptive analyses mark raw distribution entries corrected:false beside the DSL cells", async () => {
+test("corrected descriptive analyses mark raw distribution entries corrected:false beside the DSL cells", async () => {
   const slug = "raw-vs-corrected";
   const units = makeUnits(30);
   const { project } = await setup(slug, { units, instruments: [judgeInstrument()] });
@@ -525,7 +524,7 @@ test("fix 4: corrected descriptive analyses mark raw distribution entries correc
 // 5 + 6 — quarantine progress ticks; persisted labelDist
 // =============================================================================
 
-test("fix 5: a quarantining unit still ticks the monitor — live done reaches total", async (t) => {
+test("a quarantining unit still ticks the monitor — live done reaches total", async (t) => {
   const slug = "quar-tick";
   const N = 12;
   const units = makeUnits(N);
@@ -567,7 +566,7 @@ test("fix 5: a quarantining unit still ticks the monitor — live done reaches t
   );
 });
 
-test("fix 6: completed runs persist labelDist on the run record (shares sum to 1)", async () => {
+test("completed runs persist labelDist on the run record (shares sum to 1)", async () => {
   const slug = "labeldist";
   const N = 12;
   const { project } = await setup(slug, { units: makeUnits(N), instruments: [judgeInstrument()] });
@@ -589,7 +588,7 @@ test("fix 6: completed runs persist labelDist on the run record (shares sum to 1
 // 7 — concurrence provenance
 // =============================================================================
 
-test("fix 7: the Director reviewed and concurred → the written line is stamped escalatedBy: director-concurred", async () => {
+test("the Director reviewed and concurred → the written line is stamped escalatedBy: director-concurred", async () => {
   const slug = "esc-concur";
   const units = makeUnits(20);
   units[7] = { ...units[7], text: "the one enormous unit about pay salary ".repeat(12) }; // escalates; oracle says yes
@@ -648,7 +647,7 @@ test("fix 7: the Director reviewed and concurred → the written line is stamped
 // 8 — evidence-cell cap honesty
 // =============================================================================
 
-test("fix 8: evidence cells cap at 100 ids while results carry the TRUE n (distribution n; triangulation divergentN)", async () => {
+test("evidence cells cap at 100 ids while results carry the TRUE n (distribution n; triangulation divergentN)", async () => {
   const slug = "cell-cap";
   const N = 150;
   const units = makeUnits(N, { isPay: () => true }); // every unit is "yes" for the judge
@@ -709,7 +708,7 @@ test("fix 8: evidence cells cap at 100 ids while results carry the TRUE n (distr
 // 10 — uncertainty-design gold guard
 // =============================================================================
 
-test("fix 10: uncertainty-design gold never mints level corrected — π is nominal, and the analysis says so", async () => {
+test("uncertainty-design gold never mints level corrected — π is nominal, and the analysis says so", async () => {
   const slug = "uncertainty-gold";
   const units = makeUnits(30);
   const { project } = await setup(slug, { units, instruments: [judgeInstrument()] });
@@ -750,7 +749,7 @@ test("fix 10: uncertainty-design gold never mints level corrected — π is nomi
 // 11 — continuous scale bounds in prompt + schema
 // =============================================================================
 
-test("fix 11: a continuous construct with scale {1,7} renders 'from 1 to 7' and enforces 1..7 in the response schema", () => {
+test("a continuous construct with scale {1,7} renders 'from 1 to 7' and enforces 1..7 in the response schema", () => {
   const scaled = createConstruct({
     id: "c_scale",
     name: "Enthusiasm",
@@ -800,7 +799,7 @@ test("fix 11: a continuous construct with scale {1,7} renders 'from 1 to 7' and 
 // 12 — Director repair metering
 // =============================================================================
 
-test("fix 12: schema-repair attempts bill — the Director meter accumulates EVERY attempt's usage, not just the final response", async (t) => {
+test("schema-repair attempts bill — the Director meter accumulates EVERY attempt's usage, not just the final response", async (t) => {
   // fixed per-call usage so attempts are countable through the meter
   const proto = Object.getPrototypeOf(mock);
   mock.complete = async function patched(req) {
