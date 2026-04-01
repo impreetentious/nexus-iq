@@ -89,7 +89,7 @@ async function mountRoutes(router, dir) {
   try {
     entries = await readdir(dir);
   } catch (err) {
-    if (err.code === "ENOENT") return; // routes land in a later task
+    if (err.code === "ENOENT") return;
     throw err;
   }
   for (const name of entries.filter((f) => f.endsWith(".js")).sort()) {
@@ -209,14 +209,14 @@ export async function startServer({
   const version = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8")).version;
 
   router.addRoute("GET", "/api/health", async (req, res) => {
-    // provider reachability lives with the routes layer (configured keys /
-    // local discovery / mock); absent routes the stub map still answers
+    // Provider reachability lives with the routes layer (configured keys,
+    // local discovery, and the always-available mock provider).
     let providers = {};
     try {
       const { providerHealth } = await import("./routes/catalog.js");
       providers = await providerHealth();
     } catch {
-      // routes not built yet — health stays minimal
+      // Health remains available if provider discovery fails.
     }
     sendJson(res, 200, { ok: true, version, providers });
   });

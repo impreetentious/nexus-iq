@@ -453,7 +453,7 @@ export default [
 
       // Alternate judges persist beside the reruns (same label filter); the
       // key is omitted entirely when none were requested — byte-compatible
-      // with the wave-1 artifact. Errored alternates keep their error.
+      // with the baseline artifact. Errored alternates keep their error.
       let altsOut = null;
       let respAlts = null;
       if (alts) {

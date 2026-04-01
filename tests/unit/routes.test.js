@@ -1,8 +1,8 @@
-// Task I — API routes integration suite. Boots the real server on an
+// API routes integration suite. Boots the real server on an
 // ephemeral port over a temp projects dir, drives every domain through HTTP
 // with MockModel as both Director and worker, and asserts the ledger story.
 //
-// Conventions (mirroring tests/integration/orchestration.test.js):
+// Conventions:
 //   - hermetic bundles via NEXUS_IQ_PROJECTS_DIR; settings via NEXUS_IQ_CONFIG_DIR;
 //   - ONE memoized MockAdapter shared with the modules under test; a single
 //     master Director handler multiplexes on the response schema;
@@ -3361,7 +3361,7 @@ test("runs: launch persists status=running BEFORE answering (no stale-status rac
     });
   });
   await ok("POST", `/api/projects/${S.slug}/runs/${pendingId}/resume`);
-  // read IMMEDIATELY — the field bug was a client refresh racing the engine's
+  // Read immediately to cover a client refresh racing the engine's
   // own first persist and re-rendering a static pending screen
   const p = await ok("GET", `/api/projects/${S.slug}`);
   const r = p.runs.find((x) => x.id === pendingId);

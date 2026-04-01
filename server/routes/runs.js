@@ -42,7 +42,7 @@ import {
 import { toCsv } from "../reporting/replication.js";
 import path from "node:path";
 
-// The engine persists runs in project.runs (the Wave-1 amendment), but the
+// The engine persists runs in project.runs, but the
 // reporting modules (methods.loadRun, replication outputs members) read
 // runs/<id>/run.json from the bundle. The routes layer bridges the seam by
 // snapshotting the run record into its directory whenever it settles.

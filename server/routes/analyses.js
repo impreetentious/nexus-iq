@@ -539,7 +539,7 @@ async function computeTriangulation(project, spec) {
   };
 }
 
-// Subgroup reliability audit (design §6.7): machine-vs-gold agreement and
+// Subgroup reliability audit: machine-vs-gold agreement and
 // error rates by metadata group — a validity tool and bias check. Requires a
 // COMPLETE human gold set (the 400 lives in the POST handler); per group it
 // reports n, the label distribution (dist), goldN, percent agreement, κ

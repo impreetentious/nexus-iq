@@ -1,21 +1,20 @@
-// Lifecycle / robustness fixes — pins the review bugs whose home is the
-// process and request lifecycle:
+// Process and request lifecycle regression coverage:
 //
-//   1. [bug 1] a runtime 'error' on the http.Server (and the ::1 mirror, and
+//   - a runtime 'error' on the http.Server (and the ::1 mirror, and
 //      coder listeners) must be LOGGED and survived, never rethrown as an
 //      uncaught exception that kills the process and every background run.
 //      installProcessGuards() adds the last-resort uncaught/unhandled logger.
-//   2. [bug 2 — brief] generateBrief honors an AbortSignal: a client that
+//   - generateBrief honors an AbortSignal: a client that
 //      disconnects before the one paid Director call spends nothing (the
 //      cooperative check fires BEFORE callDirector). Silver-tune's signal is
-//      now wired too (a between-iteration check in silverTune's loop, its
+//      wired too (a between-iteration check in silverTune's loop, its
 //      route opening an AbortController on disconnect) — see the suite footer.
-//   3. [bug 3] a coder listener that dies marks its session dead and fires the
+//   - a coder listener that dies marks its session dead and fires the
 //      onDead eviction hook, so the session registry never hands back a dead
 //      url.
-//   4. [bug 4] panel confidenceWeighted rejects a negative confidence (parity
+//   - panel confidenceWeighted rejects a negative confidence (parity
 //      with reliabilityWeighted).
-//   5. [bug 5] the methods stateHash commits to instrument.silver, so a
+//   - the methods stateHash commits to instrument.silver, so a
 //      post-hoc edit of the silver curve changes the hash.
 //
 // Harness: a real server on an ephemeral port over a temp NEXUS_IQ_PROJECTS_DIR
@@ -95,10 +94,10 @@ after(async () => {
 });
 
 // =========================================================================
-// bug 1: a runtime server 'error' is logged and survived, not fatal
+// A runtime server 'error' is logged and survived, not fatal.
 // =========================================================================
 
-test("bug1: the running http.Server has a persistent 'error' listener — a synthetic emit does not throw", () => {
+test("the running http.Server has a persistent error listener", () => {
   // after a successful listen, startServer swaps the reject-on-error wiring
   // for the persistent logger; with it attached, emitting 'error' is caught by
   // the listener instead of being rethrown by EventEmitter as an exception
@@ -116,7 +115,7 @@ test("bug1: the running http.Server has a persistent 'error' listener — a synt
   );
 });
 
-test("bug1: attachServerErrorLogger installs a non-throwing handler on an arbitrary server", () => {
+test("attachServerErrorLogger installs a non-throwing handler on an arbitrary server", () => {
   const s = http.createServer();
   assert.equal(s.listenerCount("error"), 0, "a fresh server starts with no error listener");
   attachServerErrorLogger(s, "unit");
@@ -128,7 +127,7 @@ test("bug1: attachServerErrorLogger installs a non-throwing handler on an arbitr
   s.close();
 });
 
-test("bug1: installProcessGuards is idempotent and registers the last-resort loggers", () => {
+test("installProcessGuards is idempotent and registers the last-resort loggers", () => {
   const before_ = {
     unc: process.listenerCount("uncaughtException"),
     unh: process.listenerCount("unhandledRejection"),
@@ -152,10 +151,10 @@ test("bug1: installProcessGuards is idempotent and registers the last-resort log
 });
 
 // =========================================================================
-// bug 3: a dead coder listener marks its session dead and fires onDead
+// A dead coder listener marks its session dead and fires onDead.
 // =========================================================================
 
-test("bug3: a coder listener that loses its server marks the session dead and fires onDead exactly once", async () => {
+test("a coder listener that loses its server marks the session dead and fires onDead exactly once", async () => {
   // a project + a goldset are not needed: startCoderListener binds the ids and
   // opens a restricted listener; the registry-hygiene wiring is independent of
   // any coding state.
@@ -184,10 +183,10 @@ test("bug3: a coder listener that loses its server marks the session dead and fi
 });
 
 // =========================================================================
-// bug 4: confidenceWeighted rejects a negative confidence (parity)
+// confidenceWeighted rejects a negative confidence.
 // =========================================================================
 
-test("bug4: confidenceWeighted aggregation throws on a negative-confidence juror", () => {
+test("confidenceWeighted aggregation throws on a negative-confidence juror", () => {
   const payload = { aggregation: "confidenceWeighted" };
   // a well-formed positive-confidence panel still aggregates
   const okVerdict = aggregate(
@@ -235,7 +234,7 @@ test("bug4: confidenceWeighted aggregation throws on a negative-confidence juror
 });
 
 // =========================================================================
-// bug 2 (brief): generateBrief honors an AbortSignal before the paid call
+// generateBrief honors an AbortSignal before the paid call.
 // =========================================================================
 
 const BRIEF = { slug: "brief-abort-demo", corpusId: "corp_b" };
@@ -279,7 +278,7 @@ async function buildBriefProject() {
   return project;
 }
 
-test("bug2-brief: an already-aborted signal stops generateBrief BEFORE the Director call (zero model calls)", async () => {
+test("an already-aborted signal stops generateBrief before the Director call (zero model calls)", async () => {
   const project = await buildBriefProject();
   const ac = new AbortController();
   ac.abort(); // the client already disconnected
@@ -297,7 +296,7 @@ test("bug2-brief: an already-aborted signal stops generateBrief BEFORE the Direc
   );
 });
 
-test("bug2-brief: without an abort, generateBrief makes exactly one Director call and returns a brief", async () => {
+test("without an abort, generateBrief makes exactly one Director call and returns a brief", async () => {
   const project = await buildBriefProject();
   const callsBefore = DIRECTOR.calls;
   const brief = await generateBrief(project, BRIEF.corpusId, {});
@@ -307,7 +306,7 @@ test("bug2-brief: without an abort, generateBrief makes exactly one Director cal
   assert.ok(Array.isArray(brief.paragraphs), "a brief came back");
 });
 
-test("bug2-brief: aborting after the first stage and before the call still spends nothing", async () => {
+test("aborting after the first stage and before the call still spends nothing", async () => {
   const project = await buildBriefProject();
   const ac = new AbortController();
   const callsBefore = DIRECTOR.calls;
@@ -331,7 +330,7 @@ test("bug2-brief: aborting after the first stage and before the call still spend
 });
 
 // =========================================================================
-// bug 5: methods stateHash commits to instrument.silver
+// methods stateHash commits to instrument.silver.
 // =========================================================================
 
 const HASH = { slug: "statehash-demo", dir: null };
@@ -450,7 +449,7 @@ async function buildStateHashProject() {
   return project;
 }
 
-test("bug5: two instruments differing ONLY in silver.iterations produce different stateHashes", async () => {
+test("two instruments differing only in silver.iterations produce different stateHashes", async () => {
   const project = await buildStateHashProject();
   const hashOf = async (proj) => {
     await methods.generate(proj, "an_sh", { projectDir: HASH.dir });
@@ -488,7 +487,7 @@ test("bug5: two instruments differing ONLY in silver.iterations produce differen
 });
 
 // -------------------------------------------------------------------------
-// bug 2 for POST /silver-tune — IMPLEMENTED. The abort is now honored by a
+// POST /silver-tune honors aborts through a
 // between-iteration check inside silverTune (server/director/silver.js: the
 // `if (signal?.aborted) { stoppedBy = "aborted"; break; }` guard before the
 // next iteration's paid worker+Director calls), and the owned route wires it
