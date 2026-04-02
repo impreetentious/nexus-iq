@@ -1,4 +1,4 @@
-// Task D — provider layer tests. Fully hermetic: every "provider API" here is
+// Provider layer tests. Fully hermetic: every "provider API" here is
 // a local node:http server on an ephemeral 127.0.0.1 port; no test touches a
 // real network. MockModel tests are deterministic by construction.
 import { describe, it } from "node:test";

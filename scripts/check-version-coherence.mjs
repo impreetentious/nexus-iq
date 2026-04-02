@@ -52,6 +52,17 @@ for (const workflowPath of EXPECTED.workflows) {
   }
 }
 
+const dockerfile = read("Dockerfile");
+const dockerNodeTags = [...dockerfile.matchAll(/^FROM\s+node:([^\s]+)(?:\s+AS\s+\S+)?$/gim)].map(
+  (match) => match[1],
+);
+if (dockerNodeTags.length === 0) errors.push("Dockerfile has no Node base image");
+for (const tag of dockerNodeTags) {
+  if (tag !== `${nvm}-alpine`) {
+    errors.push(`Dockerfile node:${tag} ≠ .nvmrc ${nvm} (expected node:${nvm}-alpine)`);
+  }
+}
+
 // SheetJS must resolve from the vendored tarball (supply-chain).
 const xlsx = pkg.dependencies?.xlsx ?? "";
 if (!String(xlsx).startsWith("file:./vendor/xlsx-")) {

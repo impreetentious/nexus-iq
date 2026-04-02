@@ -1,4 +1,4 @@
-// Tests for the Nexus IQ dictionary engine (Task E).
+// Tests for the Nexus IQ dictionary engine.
 // Run: node --test tests/unit/dictionary.test.js
 import { test } from "node:test";
 import assert from "node:assert/strict";

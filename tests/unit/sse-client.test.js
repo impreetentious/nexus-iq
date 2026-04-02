@@ -1,7 +1,7 @@
 // The client side of the SSE contract: server routes report terminal failures
 // as an `event: error` inside a 200 stream (see server/routes/brief.js). The
 // client MUST surface that to onError — a dropped error event leaves screens
-// composing forever ("reading a stratified sample…", field bug).
+// composing forever ("reading a stratified sample…").
 import { test } from "node:test";
 import assert from "node:assert/strict";
 

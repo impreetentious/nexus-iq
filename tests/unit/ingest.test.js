@@ -1,4 +1,4 @@
-// Task C — Ingestion test suite. Run: node --test tests/unit/ingest.test.js
+// Ingestion test suite. Run: node --test tests/unit/ingest.test.js
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";

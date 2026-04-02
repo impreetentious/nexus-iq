@@ -3,9 +3,9 @@
 // Covers keyboard reachability, axe-core violations, zoom (200%), and narrow
 // (360px) layouts across primary screens in fixtures mode.
 //
-// The requirement: keyboard reachability, zero
-// serious or critical axe violations, usable layout at 200% zoom, and no
-// horizontal overflow at 360px, on every primary screen.
+// Acceptance criteria: keyboard reachability, zero serious or critical axe
+// violations, usable layout at 200% zoom, and no horizontal overflow at 360px
+// on every primary screen.
 //
 // Run (devDependency install required):
 //   npx playwright install chromium

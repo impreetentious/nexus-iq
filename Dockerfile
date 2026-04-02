@@ -1,5 +1,5 @@
 # Build and run the public Next.js shell plus the local Nexus IQ backend.
-FROM node:20-alpine AS builder
+FROM node:20.20.1-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 COPY vendor ./vendor
@@ -7,7 +7,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine
+FROM node:20.20.1-alpine
 WORKDIR /app
 RUN chown node:node /app
 COPY --from=builder --chown=node:node /app/package*.json ./
