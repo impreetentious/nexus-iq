@@ -217,8 +217,13 @@ export const imports = {
     for (const [k, v] of Object.entries(fields)) form.append(k, v);
     return request("POST", `${P(p)}/import`, { multipart: form });
   },
-  confirm: (p, { mapping, unitization }) =>
-    post(`${P(p)}/import/confirm`, { mapping, unitization }),
+  /**
+   * Commit a staged upload → {corpusId, unitCount, skipped, junkQueue, pii}.
+   * The whole body is forwarded: {importId, mapping: {textColumn?, columns?},
+   * unitization: {scheme?}, pii?: "off"|"scan"|"pseudonymize"}. Destructuring
+   * a subset here would silently drop the researcher's identifier choice.
+   */
+  confirm: (p, body) => post(`${P(p)}/import/confirm`, body),
 };
 
 export const corpora = {

@@ -15,6 +15,9 @@ import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { NexusIQError } from "../core/errors.js";
 import {
+  appConfigFile,
+  configDir,
+  keysFile,
   loadProject,
   updateProject,
   readNdjson,
@@ -435,13 +438,9 @@ export function finalsOf(outputs, instrument) {
 
 // --------------------------------------------------------------- settings
 
-export function configDir() {
-  return process.env.NEXUS_IQ_CONFIG_DIR || path.resolve(process.cwd(), "config");
-}
-
-export function keysFile() {
-  return path.join(configDir(), "keys.json");
-}
+// configDir/keysFile/appConfigFile live in core/store.js beside projectsDir
+// and vaultsDir — one repo-root-anchored definition for every consumer.
+export { configDir, keysFile, appConfigFile };
 
 export async function readKeysFile() {
   const keys = await readJsonFile(keysFile());

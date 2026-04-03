@@ -24,6 +24,25 @@ export function vaultsDir() {
   return process.env.NEXUS_IQ_VAULTS_DIR || path.join(repoRoot, "vaults");
 }
 
+// Provider keys (keys.json) and app defaults (app.json). Resolved off the repo
+// root like the other two data roots — NOT process.cwd(), which would move the
+// config with whatever directory the server happened to be launched from and
+// split the write side (Settings) from the read side (adapters, boot port).
+// THE one definition: routes/_shared.js, providers/registry.js and index.js
+// all resolve config paths through here so a NEXUS_IQ_CONFIG_DIR override
+// moves every consumer together.
+export function configDir() {
+  return process.env.NEXUS_IQ_CONFIG_DIR || path.join(repoRoot, "config");
+}
+
+export function keysFile() {
+  return path.join(configDir(), "keys.json");
+}
+
+export function appConfigFile() {
+  return path.join(configDir(), "app.json");
+}
+
 // The store-boundary slug guard. Route params reach loadProject/updateProject
 // directly (the router decodes %2F INSIDE segments, so "..%2Foutside" arrives
 // as "../outside"), and creation-time validation in objects.js cannot protect

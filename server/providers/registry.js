@@ -3,8 +3,8 @@
 // touch the network exists. Overrides return a ledgerEvent for the CALLER to
 // append; this module never writes the ledger itself.
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { NexusIQError } from "../core/errors.js";
+import { keysFile } from "../core/store.js";
 import { AnthropicAdapter } from "./anthropic.js";
 import { OpenAIAdapter } from "./openai.js";
 import { OpenRouterAdapter } from "./openrouter.js";
@@ -112,7 +112,10 @@ export function getAdapter(project, providerName, { justification, keysPath } = 
     };
   }
 
-  const path = keysPath ?? resolve(process.cwd(), "config", "keys.json");
+  // Same keys.json the Settings route writes (core/store.js keysFile) — a
+  // divergent default here would report a provider as configured while every
+  // completion failed with "no API key configured".
+  const path = keysPath ?? keysFile();
   const entry = normalizeEntry(readKeys(path)[providerName]);
   if (mode === "strict" && providerName === "ollama" && !isLoopbackBaseUrl(entry.baseUrl)) {
     throw new NexusIQError(

@@ -20,8 +20,7 @@
 
 import { el, clear } from "../dom.js";
 import { store } from "../state.js";
-import api, { ApiError } from "../api.js";
-import { fixturesEnabled } from "../fixtures.js";
+import api from "../api.js";
 import * as router from "../router.js";
 import * as jobs from "../jobs.js";
 import * as toast from "../components/toast.js";
@@ -448,7 +447,7 @@ function renderSheet(mount, params, proposal, file, teardown = []) {
           // live confirm wants the text column by name + the edited role map
           // (ignore roles only take effect server-side) + the scheme + pii mode
           const textColumn = tabular ? unitTextColumn : null;
-          const result = await confirmImport(params.slug, {
+          const result = await api.imports.confirm(params.slug, {
             importId: proposal.importId,
             mapping: textColumn
               ? { textColumn, columns: columns.map((c) => ({ name: c.name, role: c.role })) }
@@ -493,44 +492,6 @@ function renderSheet(mount, params, proposal, file, teardown = []) {
   );
   const bar = el("div", { class: "confirmbar" }, confirmBtn);
   mount.append(bar);
-}
-
-// POST import/confirm with the FULL body. The api.imports.confirm wrapper
-// forwards only {mapping, unitization} and would silently drop the pii choice
-// (it already drops importId — the server's latest-upload fallback exists for
-// that reason); api.js is frozen for this change, so the screen speaks the
-// same JSON envelope itself. Fixtures mode patches api.imports.confirm in
-// place, so the demo routes through the wrapper as before.
-async function confirmImport(slug, body) {
-  if (fixturesEnabled()) return api.imports.confirm(slug, body);
-  let res;
-  try {
-    res = await fetch(`/api/projects/${encodeURIComponent(slug)}/import/confirm`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    throw new ApiError("UNREACHABLE", `Nexus IQ server unreachable (${err.message})`, {
-      status: 0,
-    });
-  }
-  let envelope = null;
-  try {
-    envelope = JSON.parse(await res.text());
-  } catch {
-    /* non-JSON body */
-  }
-  if (envelope?.ok === true) return envelope.data;
-  if (envelope?.ok === false && envelope.error) {
-    throw new ApiError(envelope.error.code || "ERROR", envelope.error.message || "Request failed", {
-      status: res.status,
-      details: envelope.error,
-    });
-  }
-  throw new ApiError("HTTP_" + res.status, `POST import/confirm → ${res.status}`, {
-    status: res.status,
-  });
 }
 
 // One sentence of what the identifier step found, zeros skipped — null when

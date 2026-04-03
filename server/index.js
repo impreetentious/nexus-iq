@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import { createRouter, sendJson } from "./router.js";
+import { appConfigFile } from "./core/store.js";
 import { NexusIQError } from "./core/errors.js";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -51,21 +52,7 @@ export function installProcessGuards() {
   });
 }
 
-// --coder <goldsetId>:<coderId> launches a blind coding profile. The route
-// gate itself lands with the goldset routes; here we only parse + export.
-export function parseServerMode(argv = process.argv.slice(2)) {
-  const i = argv.indexOf("--coder");
-  if (i === -1) return { role: "full" };
-  const spec = argv[i + 1] ?? "";
-  const m = /^([^:]+):(.+)$/.exec(spec);
-  if (!m)
-    throw new NexusIQError("VALIDATION", "--coder requires <goldsetId>:<coderId>", { got: spec });
-  return { role: "coder", goldsetId: m[1], coderId: m[2] };
-}
-
-export const serverMode = parseServerMode();
-
-export async function readPort(configPath = path.join(repoRoot, "config", "app.json")) {
+export async function readPort(configPath = appConfigFile()) {
   // First try environment variable (useful for CI or Docker)
   const envPortStr = process.env.NXQ_PORT;
   if (envPortStr) {

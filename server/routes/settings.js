@@ -3,14 +3,20 @@
 // privacy mode (changes ledgered; LOOSENING the mode requires an explicit
 // {confirmDowngrade: true}), budget cap, and the Director slot (including
 // systemSuffix).
-import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { NexusIQError } from "../core/errors.js";
 import { updateProject, loadProject, DIR_MODE, FILE_MODE } from "../core/store.js";
 import * as ledger from "../core/ledger.js";
 import { clearAdapterCache } from "../providers/registry.js";
 import { PRIVACY_MODES } from "../core/objects.js";
-import { pdirOf, configDir, keysFile, readKeysFile, readJsonFile } from "./_shared.js";
+import {
+  pdirOf,
+  appConfigFile,
+  configDir,
+  keysFile,
+  readKeysFile,
+  readJsonFile,
+} from "./_shared.js";
 
 // strictness rank: moving DOWN (strict → no-training → open) is a downgrade
 const RANK = { open: 0, "no-training": 1, strict: 2 };
@@ -39,7 +45,7 @@ function maskedKeys(keys) {
 
 async function currentSettings() {
   const keys = await readKeysFile();
-  const app = (await readJsonFile(path.join(configDir(), "app.json"))) ?? {};
+  const app = (await readJsonFile(appConfigFile())) ?? {};
   return { keys: maskedKeys(keys), port: app.port ?? 7341 };
 }
 
@@ -158,10 +164,10 @@ export default [
             port: body.port,
           });
         }
-        const app = (await readJsonFile(path.join(configDir(), "app.json"))) ?? {};
+        const app = (await readJsonFile(appConfigFile())) ?? {};
         app.port = body.port;
-        await mkdir(configDir(), { recursive: true });
-        await writeFile(path.join(configDir(), "app.json"), JSON.stringify(app, null, 2), "utf8");
+        await mkdir(configDir(), { recursive: true, mode: DIR_MODE });
+        await writeFile(appConfigFile(), JSON.stringify(app, null, 2), "utf8");
         result.port = body.port;
       }
 

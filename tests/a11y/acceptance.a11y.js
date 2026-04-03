@@ -1,11 +1,17 @@
 // Accessibility acceptance suite
 //
-// Covers keyboard reachability, axe-core violations, zoom (200%), and narrow
-// (360px) layouts across primary screens in fixtures mode.
+// What this suite actually asserts, in fixtures mode:
+//   - the backend UI serves an enforcing CSP and the page trips no CSP errors;
+//   - zero serious/critical axe (wcag2a + wcag2aa) violations on the home
+//     screen, on the home screen at 200% zoom, and on settings at 360px;
+//   - the skip link, rail toggle, ops center, and inspector are reachable and
+//     operable from the keyboard.
 //
-// Acceptance criteria: keyboard reachability, zero serious or critical axe
-// violations, usable layout at 200% zoom, and no horizontal overflow at 360px
-// on every primary screen.
+// Scope limits worth knowing before trusting a green run: axe coverage is
+// per-screen, not exhaustive across every route, and horizontal overflow is
+// not asserted. Project-scoped screens do overflow a 360px viewport once the
+// privacy chip joins the (non-shrinking) topbar cluster; docs/viewport-policy.md
+// states 360px as the minimum supported width, so that gap is a known one.
 //
 // Run (devDependency install required):
 //   npx playwright install chromium

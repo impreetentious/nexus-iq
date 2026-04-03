@@ -5,10 +5,11 @@
 //
 // CONCURRENCY CONTRACT: a project bundle has exactly ONE writing process.
 // Appends are serialized in-process by a promise queue; there is no cross-
-// process file lock. The --coder profile therefore runs inside the same
-// server process (a route gate, not a second writer). As a safety net for
-// stale state, append() stats the file and re-reads the tail whenever the
-// size on disk does not match its checkpoint.
+// process file lock. Blind coder sessions therefore run as restricted
+// listeners inside the same server process (index.js startCoderListener — a
+// route gate, not a second writer). As a safety net for stale state, append()
+// stats the file and re-reads the tail whenever the size on disk does not
+// match its checkpoint.
 //
 // TORN TAILS: a torn final line (file lacking its trailing "\n") means the
 // last append never durably completed — it is NOT corruption. append() heals

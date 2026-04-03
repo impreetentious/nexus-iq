@@ -31,7 +31,7 @@ import {
 import * as cache from "../../server/core/cache.js";
 import { NexusIQError } from "../../server/core/errors.js";
 import { createRouter, parseMultipart, sse } from "../../server/router.js";
-import { startServer, parseServerMode, readPort } from "../../server/index.js";
+import { startServer, readPort } from "../../server/index.js";
 
 async function tmpdir(t) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-test-"));
@@ -759,24 +759,6 @@ test("server: auto-mounts route modules from routesDir", async (t) => {
   const r = await fetch(`${srv.url}/api/fixture/abc`);
   assert.equal(r.status, 200);
   assert.deepEqual(await r.json(), { ok: true, data: { got: "abc" } });
-});
-
-test("server: parseServerMode parses --coder <goldsetId>:<coderId>", () => {
-  assert.deepEqual(parseServerMode([]), { role: "full" });
-  assert.deepEqual(parseServerMode(["--port", "9999"]), { role: "full" });
-  assert.deepEqual(parseServerMode(["--coder", "gs_1:alice"]), {
-    role: "coder",
-    goldsetId: "gs_1",
-    coderId: "alice",
-  });
-  assert.throws(
-    () => parseServerMode(["--coder", "missing-colon"]),
-    (e) => e.code === "VALIDATION",
-  );
-  assert.throws(
-    () => parseServerMode(["--coder"]),
-    (e) => e.code === "VALIDATION",
-  );
 });
 
 // ------------------------------------------- regression: foundation hardening

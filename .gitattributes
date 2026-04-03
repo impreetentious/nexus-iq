@@ -3,9 +3,6 @@
 # exact bytes, and a Windows clone with autocrlf would corrupt them.
 * text=auto eol=lf
 
-# Windows launcher needs CRLF
-*.bat text eol=crlf
-
 # Binary test fixtures — never touch
 *.docx binary
 *.pdf binary

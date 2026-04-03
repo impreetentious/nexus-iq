@@ -22,6 +22,7 @@ import { startServer } from "../../server/index.js";
 import { AnthropicAdapter } from "../../server/providers/anthropic.js";
 import { OpenAIAdapter } from "../../server/providers/openai.js";
 import { mergeCatalogPricing } from "../../server/providers/base.js";
+import { getAdapter } from "../../server/providers/registry.js";
 
 let tmpProjects;
 let tmpConfig;
@@ -35,6 +36,16 @@ before(async () => {
   process.env.NEXUS_IQ_CONFIG_DIR = tmpConfig;
   srv = await startServer({ port: 0 });
   base = `http://127.0.0.1:${srv.port}`;
+  // network-backed catalogs must not leave the machine during tests. The
+  // openrouter model list is a keyless PUBLIC endpoint, so buildCatalog would
+  // otherwise fetch openrouter.ai on every run; a developer with Ollama up
+  // would likewise get a machine-dependent list. Neither is asserted below —
+  // the anthropic/openai static catalogs under test stay untouched and make
+  // no network call while keyless.
+  for (const name of ["openrouter", "ollama"]) {
+    const { adapter } = getAdapter({ privacyMode: "open" }, name);
+    adapter.catalog = async () => [];
+  }
 });
 
 after(async () => {
