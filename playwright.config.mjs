@@ -1,3 +1,4 @@
+// Accessibility suite only; the functional tests run under node:test, not Playwright.
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({

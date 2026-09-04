@@ -334,6 +334,10 @@ function goldCsv(goldset, unitsMap, includeGoldText) {
 }
 
 async function outputsCsv(projectDir, runId) {
+  // belt + braces: the caller's runId already survived loadRun's guard, but
+  // this is the seam where it becomes a path segment (same convention as the
+  // corpora read above and _shared.runOutputsFile).
+  assertStorageId(runId, "run id");
   const outputs = await readNdjson(path.join(projectDir, "runs", runId, "outputs.ndjson"));
   const jurors = new Set(outputs.map((o) => o.juror).filter((j) => j !== undefined));
   const multi = jurors.size > 1;

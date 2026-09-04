@@ -8,7 +8,7 @@
 // is Exploratory. A print stylesheet makes the same file publication-ready.
 import path from "node:path";
 import { NexusIQError } from "../core/errors.js";
-import { readNdjson } from "../core/store.js";
+import { assertStorageId, readNdjson } from "../core/store.js";
 import {
   generate as generateMethods,
   generatePreview as previewMethods,
@@ -42,6 +42,7 @@ export function esc(s) {
 async function loadAllUnits(project, projectDir) {
   const map = new Map();
   for (const c of project.corpora ?? []) {
+    assertStorageId(c.id, "corpus id");
     const units = await readNdjson(path.join(projectDir, "corpora", c.id, "units.ndjson"));
     for (const u of units) map.set(u.id, u);
   }
@@ -50,6 +51,10 @@ async function loadAllUnits(project, projectDir) {
 
 async function loadOutputsByUnit(projectDir, runId, cache) {
   if (cache.has(runId)) return cache.get(runId);
+  // runId arrives as analysis.spec.runId — server-minted for a real analysis,
+  // but a report block's `ref` can name an arbitrary analyses/<id>.json, so
+  // the id reaching this path segment is not trusted by construction.
+  assertStorageId(runId, "run id");
   const rows = await readNdjson(path.join(projectDir, "runs", runId, "outputs.ndjson"));
   const byUnit = new Map();
   for (const o of rows) {

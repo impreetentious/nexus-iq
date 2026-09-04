@@ -9,6 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
 const lock = JSON.parse(readFileSync(path.join(root, "package-lock.json"), "utf8"));
 const readme = readFileSync(path.join(root, "README.md"), "utf8");
+// Every release-version surface is listed here; adding a new one means adding it here too.
 const read = (file) => readFileSync(path.join(root, file), "utf8");
 
 const errors = [];

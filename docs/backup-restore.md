@@ -1,6 +1,7 @@
 # Backup and restore
 
-Nexus IQ is local-first. Durable state lives on disk:
+Nexus IQ is local-first. Durable state lives on disk, which makes a backup a file
+copy rather than an export:
 
 | Path               | Contents                                                                      |
 | ------------------ | ----------------------------------------------------------------------------- |

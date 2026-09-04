@@ -3,18 +3,61 @@
 import { NexusIQError } from "../core/errors.js";
 import { Adapter, httpJSON, malformedResponse, mergeCatalogPricing } from "./base.js";
 
-// Figures verified against developers.openai.com/api/docs/models, 2026-03
-// (GPT-5.2 $1.75/$14 · 400K ctx; GPT-5 mini $0.25/$2 · 400K ctx). `gpt-5-mini`
-// is the current small-model id — there is no `gpt-5.2-mini`. Keyless
-// selection targets these ids directly, so a wrong id would 404 the call.
+// Figures verified 2026-08-16 against OpenAI's published API rates. The GPT-5.6
+// family (GA 2026-07-09) ships three durable capability tiers on one
+// 1.05M-token context: Sol $5/$30, Terra $2/$12, Luna $0.20/$1.20 — the
+// standard SHORT-context rates. Long-context requests bill roughly double
+// (Sol $10/$45, Terra $4/$18, Luna $0.40/$1.80), which this flat table does
+// not model, so a long-context run UNDER-estimates. GPT-5.2 and GPT-5 mini
+// stay listed for keys still pinned to them. `gpt-5-mini` is that generation's
+// small-model id — there is no `gpt-5.2-mini`. Keyless selection targets these
+// ids directly, so a wrong id would 404 the call.
+//
+// Unlike current Anthropic models, the GPT-5.6 tiers still accept temperature
+// and top_p, so buildBody keeps sending temperature 0 for judge determinism;
+// reasoning depth is a separate `reasoning effort` knob Nexus IQ does not set.
+//
+// A model MISSING from this table prices at $0 (mergeCatalogPricing's honest
+// unknown), which silently zeroes the budget meter and the cap for anyone
+// running it — so the current flagships must stay listed.
 //
 // `pricingVerifiedAt` is the ISO date of the last human check against the
 // provider's public price sheet. It rides the merged catalog entry to the
 // UI so a wizard can flag anything older than the staleness budget (see
 // routes/catalog.js `freshness.staleAfterDays`). Bump the date whenever
 // you re-verify these numbers.
-const PRICING_VERIFIED_AT = "2026-03-18";
+const PRICING_VERIFIED_AT = "2026-08-16";
 const STATIC_CATALOG = [
+  {
+    id: "gpt-5.6-sol",
+    name: "GPT-5.6 Sol",
+    family: "openai",
+    ctx: 1_050_000,
+    pricing: { inUSDper1M: 5, outUSDper1M: 30 },
+    snapshot: "gpt-5.6-sol",
+    estimate: true,
+    pricingVerifiedAt: PRICING_VERIFIED_AT,
+  },
+  {
+    id: "gpt-5.6-terra",
+    name: "GPT-5.6 Terra",
+    family: "openai",
+    ctx: 1_050_000,
+    pricing: { inUSDper1M: 2, outUSDper1M: 12 },
+    snapshot: "gpt-5.6-terra",
+    estimate: true,
+    pricingVerifiedAt: PRICING_VERIFIED_AT,
+  },
+  {
+    id: "gpt-5.6-luna",
+    name: "GPT-5.6 Luna",
+    family: "openai",
+    ctx: 1_050_000,
+    pricing: { inUSDper1M: 0.2, outUSDper1M: 1.2 },
+    snapshot: "gpt-5.6-luna",
+    estimate: true,
+    pricingVerifiedAt: PRICING_VERIFIED_AT,
+  },
   {
     id: "gpt-5.2",
     name: "GPT-5.2",

@@ -1,6 +1,7 @@
 # vendor/
 
-Mirrored third-party tarballs used for supply-chain hardening.
+Mirrored third-party tarballs used for supply-chain hardening: an install must not
+depend on a live CDN.
 
 - `xlsx-0.20.3.tgz` — SheetJS Community Edition, fetched from the official
   SheetJS CDN (`https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`). The

@@ -10,7 +10,19 @@
 import { callDirector } from "./director.js";
 import { escalationPrompt, escalationSchema } from "./prompts.js";
 
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// Label equality, canonicalized the SAME way every other label comparison in
+// the codebase is (runs/monitor.js labelKey, routes/_shared.js labelKey):
+// multilabel labels are arrays and carry no meaningful order, so ["pay",
+// "workload"] and ["workload", "pay"] are the SAME verdict. A raw
+// JSON.stringify compare called that a disagreement and overwrote the
+// worker's line with a reordered copy of itself — inflating
+// run.escalation.count and stamping escalatedBy "director" (an override) on a
+// unit the Director had actually concurred with. Scalars keep their existing
+// strict behavior (5 and "5" stay distinct), matching labelKey exactly.
+const labelKey = (v) =>
+  Array.isArray(v) ? JSON.stringify([...v].map(String).sort()) : JSON.stringify(v);
+
+const same = (a, b) => labelKey(a) === labelKey(b);
 
 // makeEscalator(project, construct) → async (unit, output) → Output | null
 export function makeEscalator(project, construct) {

@@ -1,4 +1,5 @@
-# Optional local runtime for the public Nexus IQ app.
+# Optional local runtime for the public Nexus IQ app. Nothing here is required to
+# run Nexus IQ from source.
 # Named volumes persist project bundles, PII re-identification vaults, and
 # provider config across container recreation.
 services:

@@ -525,6 +525,82 @@ describe("AnthropicAdapter", () => {
     );
   });
 
+  it("omits temperature for current-gen models that reject it (opus-4-8), keeps it for models that accept it", async () => {
+    // Opus 4.8 rejects sampling params with a hard 400 — the body must not carry one.
+    await withServer(
+      () => anthropicToolResponse({ rationale: "r", label: "pay", confidence: 0.5 }),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        await adapter.complete({
+          model: "claude-opus-4-8",
+          messages: [{ role: "user", content: "x" }],
+          schema: judgeSchema,
+          temperature: 0,
+          maxTokens: 64,
+        });
+        assert.equal(
+          "temperature" in srv.calls[0].body,
+          false,
+          "opus-4-8 body must omit temperature",
+        );
+      },
+    );
+    // Sonnet 4.6 still accepts it → determinism is preserved (temperature: 0).
+    await withServer(
+      () => anthropicToolResponse({ rationale: "r", label: "pay", confidence: 0.5 }),
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        await adapter.complete({
+          model: "claude-sonnet-4-6",
+          messages: [{ role: "user", content: "x" }],
+          schema: judgeSchema,
+          temperature: 0,
+          maxTokens: 64,
+        });
+        assert.equal(srv.calls[0].body.temperature, 0, "sonnet-4-6 must still send temperature 0");
+      },
+    );
+  });
+
+  it("self-heals a sampling-param 400 on an unlisted model: retries once without it", async () => {
+    await withServer(
+      (call) => {
+        // first attempt carries temperature and is rejected; retry must omit it
+        if (call.body.temperature !== undefined) {
+          return {
+            status: 400,
+            body: {
+              type: "error",
+              error: {
+                type: "invalid_request_error",
+                message: "temperature: unexpected parameter for this model",
+              },
+            },
+          };
+        }
+        return anthropicToolResponse({ rationale: "r", label: "pay", confidence: 0.5 });
+      },
+      async (srv) => {
+        const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
+        // a model NOT in the prefix list — only the 400 retry can save it
+        const res = await adapter.complete({
+          model: "claude-zephyr-9",
+          messages: [{ role: "user", content: "x" }],
+          schema: judgeSchema,
+          temperature: 0,
+          maxTokens: 64,
+        });
+        assert.equal(srv.calls.length, 2, "one rejected attempt + one retry");
+        assert.equal(
+          "temperature" in srv.calls[1].body,
+          false,
+          "retry must drop the sampling param",
+        );
+        assert.equal(res.json.label, "pay");
+      },
+    );
+  });
+
   it("plain completion sends no tools and returns text", async () => {
     await withServer(
       () => ({
@@ -682,7 +758,15 @@ describe("AnthropicAdapter", () => {
       const cat = await adapter.catalog();
       assert.equal(fetches, 0);
       const ids = cat.map((m) => m.id);
-      assert.deepEqual(ids, ["claude-3-opus", "claude-sonnet-4-6", "claude-haiku-4-5"]);
+      assert.deepEqual(ids, [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-fable-5",
+        "claude-mythos-5",
+        "claude-opus-4-8",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
+      ]);
       for (const m of cat) {
         assert.equal(m.estimate, true);
         assert.equal(m.family, "anthropic");
@@ -724,7 +808,7 @@ describe("AnthropicAdapter.catalog (live)", () => {
         assert.match(call.url, /^\/v1\/models(\?|$)/);
         return modelsPage([
           // dated snapshot ids → prefix-match the bare static ids
-          { id: "claude-3-opus-20240229", display_name: "Claude 3 Opus", type: "model" },
+          { id: "claude-opus-4-8-20260515", display_name: "Claude Opus 4.8", type: "model" },
           { id: "claude-sonnet-4-6-20260219", display_name: "Claude Sonnet 4.6", type: "model" },
           // a brand-new model absent from the static table → honest unknown
           { id: "claude-flux-9-0-20260601", display_name: "Claude Flux 9.0", type: "model" },
@@ -741,17 +825,17 @@ describe("AnthropicAdapter.catalog (live)", () => {
         // live ids appear (the field complaint: new snapshots never showed up)
         assert.deepEqual(
           cat.map((m) => m.id),
-          ["claude-3-opus-20240229", "claude-sonnet-4-6-20260219", "claude-flux-9-0-20260601"],
+          ["claude-opus-4-8-20260515", "claude-sonnet-4-6-20260219", "claude-flux-9-0-20260601"],
         );
         // opus snapshot inherited the static opus pricing + ctx by prefix
-        assert.deepEqual(byId["claude-3-opus-20240229"].pricing, {
-          inUSDper1M: 15,
-          outUSDper1M: 75,
+        assert.deepEqual(byId["claude-opus-4-8-20260515"].pricing, {
+          inUSDper1M: 5,
+          outUSDper1M: 25,
         });
-        assert.equal(byId["claude-3-opus-20240229"].ctx, 200_000);
-        assert.equal(byId["claude-3-opus-20240229"].name, "Claude 3 Opus");
-        assert.equal(byId["claude-3-opus-20240229"].family, "anthropic");
-        assert.equal(byId["claude-3-opus-20240229"].snapshot, "claude-3-opus-20240229");
+        assert.equal(byId["claude-opus-4-8-20260515"].ctx, 1_000_000);
+        assert.equal(byId["claude-opus-4-8-20260515"].name, "Claude Opus 4.8");
+        assert.equal(byId["claude-opus-4-8-20260515"].family, "anthropic");
+        assert.equal(byId["claude-opus-4-8-20260515"].snapshot, "claude-opus-4-8-20260515");
         assert.deepEqual(byId["claude-sonnet-4-6-20260219"].pricing, {
           inUSDper1M: 3,
           outUSDper1M: 15,
@@ -775,11 +859,15 @@ describe("AnthropicAdapter.catalog (live)", () => {
         if (n === 1) {
           assert.ok(!/after_id/.test(call.url), "first page must not send after_id");
           return modelsPage(
-            [{ id: "claude-3-opus-20240229", display_name: "Opus", type: "model" }],
+            [{ id: "claude-opus-4-8-20260515", display_name: "Opus", type: "model" }],
             true,
           );
         }
-        assert.match(call.url, /after_id=claude-3-opus-20240229/, "second page cursors on last_id");
+        assert.match(
+          call.url,
+          /after_id=claude-opus-4-8-20260515/,
+          "second page cursors on last_id",
+        );
         return modelsPage(
           [{ id: "claude-haiku-4-5-20260101", display_name: "Haiku", type: "model" }],
           false,
@@ -791,7 +879,7 @@ describe("AnthropicAdapter.catalog (live)", () => {
         assert.equal(srv.calls.length, 2, "exactly two pages fetched");
         assert.deepEqual(
           cat.map((m) => m.id),
-          ["claude-3-opus-20240229", "claude-haiku-4-5-20260101"],
+          ["claude-opus-4-8-20260515", "claude-haiku-4-5-20260101"],
         );
       },
     );
@@ -805,7 +893,15 @@ describe("AnthropicAdapter.catalog (live)", () => {
         const cat = await adapter.catalog();
         assert.deepEqual(
           cat.map((m) => m.id),
-          ["claude-3-opus", "claude-sonnet-4-6", "claude-haiku-4-5"],
+          [
+            "claude-opus-5",
+            "claude-sonnet-5",
+            "claude-fable-5",
+            "claude-mythos-5",
+            "claude-opus-4-8",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5",
+          ],
         );
         for (const m of cat) assert.equal(m.estimate, true);
       },
@@ -814,7 +910,7 @@ describe("AnthropicAdapter.catalog (live)", () => {
 
   it("caches the live fetch for 1h; force re-fetches", async () => {
     await withServer(
-      () => modelsPage([{ id: "claude-3-opus-20240229", display_name: "Opus", type: "model" }]),
+      () => modelsPage([{ id: "claude-opus-4-8-20260515", display_name: "Opus", type: "model" }]),
       async (srv) => {
         const adapter = new AnthropicAdapter({ apiKey: "k", baseUrl: srv.url });
         await adapter.catalog();
@@ -1084,7 +1180,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
         const cat = await adapter.catalog();
         assert.deepEqual(
           cat.map((m) => m.id),
-          ["gpt-5.2", "gpt-5-mini"],
+          ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.2", "gpt-5-mini"],
         );
         for (const m of cat) assert.equal(m.estimate, true);
       },
@@ -1103,7 +1199,7 @@ describe("OpenAIAdapter.catalog (live)", () => {
       assert.equal(fetches, 0, "keyless catalog must not hit the network");
       assert.deepEqual(
         cat.map((m) => m.id),
-        ["gpt-5.2", "gpt-5-mini"],
+        ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.2", "gpt-5-mini"],
       );
     } finally {
       globalThis.fetch = realFetch;
@@ -2380,7 +2476,7 @@ describe("registry privacy gates", () => {
         }),
         { code: "CONFIG_MISSING" },
       );
-      assert.equal((await keyless.catalog()).length, 3);
+      assert.equal((await keyless.catalog()).length, 7);
 
       writeFileSync(keysPath, "{ not json");
       assert.throws(() => getAdapter({ privacyMode: "open" }, "anthropic", { keysPath }), {

@@ -22,6 +22,7 @@ import { sha256 } from "../../server/core/ids.js";
 import { parse as parseCsv } from "../../server/ingest/csv.js";
 import { NexusIQError } from "../../server/core/errors.js";
 import { cohenKappa, krippendorffAlpha, percentAgreement } from "../../server/stats/agreement.js";
+import { rejectsSampling } from "../../server/providers/anthropic.js";
 
 // ---------------------------------------------------------------- harness
 
@@ -3151,10 +3152,30 @@ test("catalog: capability fields — static catalogs decorated from capabilities
     for (const name of ["anthropic", "openai", "mock"]) {
       for (const m of r.providers[name]) {
         assert.equal(m.structuredOutput, true, `${name}/${m.id} structuredOutput`);
-        assert.equal(m.noTemperature, false, `${name}/${m.id} noTemperature`);
         assert.equal(m.params, null, `${name}/${m.id} params unknown → null`);
+        if (name === "anthropic") {
+          // The anthropic adapter computes noTemperature per model from
+          // rejectsSampling(), the SAME predicate complete() uses to omit the
+          // parameter on the wire. Tying the two together here is the guard
+          // against the UI offering a temperature control whose value the
+          // adapter silently drops.
+          assert.equal(
+            m.noTemperature,
+            rejectsSampling(m.id),
+            `${name}/${m.id} noTemperature must track rejectsSampling`,
+          );
+        } else {
+          // openai/mock carry no per-model flags → the route's default applies
+          assert.equal(m.noTemperature, false, `${name}/${m.id} noTemperature`);
+        }
       }
     }
+    // the decoration must actually be discriminating, not uniformly false
+    const anth = r.providers.anthropic;
+    assert.ok(
+      anth.some((m) => m.noTemperature === true) && anth.some((m) => m.noTemperature === false),
+      "anthropic catalog must distinguish sampling-rejecting models from the rest",
+    );
     const o = r.providers.openrouter[0];
     assert.equal(
       o.structuredOutput,

@@ -1,4 +1,5 @@
 # Build and run the public Next.js shell plus the local Nexus IQ backend.
+# Multi-stage: the builder's toolchain never reaches the runtime image.
 FROM node:20.20.1-alpine AS builder
 WORKDIR /app
 COPY package*.json ./

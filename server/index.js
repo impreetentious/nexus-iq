@@ -436,8 +436,12 @@ if (isMain) {
     );
   } catch (err) {
     if (err?.code === "EADDRINUSE") {
+      // NXQ_PORT, not config/app.json: next.config.js reads NXQ_PORT to build
+      // the shell's /api proxy target, and Next bakes rewrites at build time.
+      // A port set only in config/app.json moves this server while the shell on
+      // 3000 keeps proxying to 7341 — every API call from the shell 502s.
       console.error(
-        `Port ${port} is already in use — is Nexus IQ already running? Close it or change the port in config/app.json.`,
+        `Port ${port} is already in use — is Nexus IQ already running? Close it, or set NXQ_PORT to a free port for BOTH processes (e.g. NXQ_PORT=7500 npm run dev). config/app.json's port moves this server only; the Next shell would keep proxying to the old port.`,
       );
     } else {
       console.error(`Nexus IQ failed to start: ${err?.message ?? err}`);

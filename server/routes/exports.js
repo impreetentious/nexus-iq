@@ -35,15 +35,30 @@ function analysisIdsFrom(req, project, { required = true } = {}) {
   return ids;
 }
 
+// The ONE analysis a methods export is about. `analysisIdsFrom` validates the
+// list it derives, but `?analyses=` wins the ?? chain there — so re-reading
+// req.query.analysisId afterwards reintroduced an UNVALIDATED path segment:
+// `?analyses=an_ok&analysisId=../../../config/keys` sailed past safeId and
+// made loadAnalysis read (and the export-of-record ledger a stateHash over) a
+// JSON file outside the project bundle. Resolve and validate in one place so
+// the guard cannot be bypassed by which query key the caller picks.
+function methodsAnalysisId(req, project) {
+  const ids = analysisIdsFrom(req, project);
+  const requested = req.query.analysisId;
+  if (requested === undefined || requested === null || requested === "") {
+    return ids[ids.length - 1];
+  }
+  return safeId(String(requested), "analysis");
+}
+
 export default [
   {
     method: "GET",
     pattern: "/api/projects/:p/exports/methods",
     handler: async (req, res, params) => {
       const project = await loadProject(params.p);
-      const ids = analysisIdsFrom(req, project);
       // export of record for ONE analysis: the most recent unless specified
-      const analysisId = req.query.analysisId ?? ids[ids.length - 1];
+      const analysisId = methodsAnalysisId(req, project);
       const { markdown, citations } = await generateMethods(project, analysisId, {
         projectDir: pdirOf(params.p),
       });
@@ -57,8 +72,7 @@ export default [
     pattern: "/api/projects/:p/exports/methods/preview",
     handler: async (req, res, params) => {
       const project = await loadProject(params.p);
-      const ids = analysisIdsFrom(req, project);
-      const analysisId = req.query.analysisId ?? ids[ids.length - 1];
+      const analysisId = methodsAnalysisId(req, project);
       const { markdown, citations } = await generateMethodsPreview(project, analysisId, {
         projectDir: pdirOf(params.p),
       });

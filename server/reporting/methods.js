@@ -29,7 +29,7 @@ import { readFile } from "node:fs/promises";
 import { NexusIQError } from "../core/errors.js";
 import { canonical, sha256 } from "../core/ids.js";
 import * as ledger from "../core/ledger.js";
-import { readNdjson } from "../core/store.js";
+import { assertStorageId, readNdjson } from "../core/store.js";
 
 export const LEVEL_MARKS = { exploratory: "◌", stabilized: "◑", calibrated: "●", corrected: "◉" };
 export const LEVEL_NAMES = {
@@ -128,7 +128,14 @@ async function readJson(file) {
   }
 }
 
+// Every id below becomes a path segment inside the bundle, and these loaders
+// are reached from MORE than the export routes — a report-canvas block's
+// `ref` lands here too, and validateReportBlock deliberately checks only the
+// block `kind`. Guarding at this boundary (the same character class the store
+// enforces for slugs) covers every caller at once, so no future call site can
+// reintroduce the traversal by forgetting an upstream check.
 export async function loadAnalysis(project, projectDir, analysisId) {
+  assertStorageId(analysisId, "analysis id");
   const fromFile = await readJson(path.join(projectDir, "analyses", `${analysisId}.json`));
   const analysis =
     fromFile ?? (project.analyses ?? []).find((a) => a?.id === analysisId && a.spec) ?? null;
@@ -145,12 +152,14 @@ export async function loadAnalysis(project, projectDir, analysisId) {
 
 export async function loadGoldset(project, projectDir, goldsetId) {
   if (!goldsetId) return null;
+  assertStorageId(goldsetId, "goldset id");
   const fromFile = await readJson(path.join(projectDir, "gold", `${goldsetId}.json`));
   return fromFile ?? (project.goldsets ?? []).find((g) => g?.id === goldsetId) ?? null;
 }
 
 export async function loadRun(projectDir, runId) {
   if (!runId) return null;
+  assertStorageId(runId, "run id");
   return readJson(path.join(projectDir, "runs", runId, "run.json"));
 }
 

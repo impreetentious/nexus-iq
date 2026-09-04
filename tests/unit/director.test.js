@@ -168,7 +168,7 @@ test("callDirector: unset director slot → CONFIG_MISSING with a researcher-fac
 test("callDirector: strict-mode project with a network director → PRIVACY_BLOCKED propagates", async () => {
   const project = await makeProject({
     privacyMode: "strict",
-    director: { provider: "anthropic", model: "claude-3-opus", snapshot: "claude-3-opus" },
+    director: { provider: "anthropic", model: "claude-opus-4-8", snapshot: "claude-opus-4-8" },
   });
   await assert.rejects(
     callDirector(project, {

@@ -41,8 +41,8 @@
         "n": 100
       },
       {
-        "key": "alt:inst_judge_s:openrouter/google-gemini-2.0-flash",
-        "label": "exit-theme · judge v3 (tuned) — alt judge google-gemini-2.0-flash",
+        "key": "alt:inst_judge_s:openrouter/google-gemini-3.5-flash",
+        "label": "exit-theme · judge v3 (tuned) — alt judge google-gemini-3.5-flash",
         "kind": "alt",
         "n": 100
       }
@@ -140,7 +140,7 @@
       },
       {
         "a": "gold",
-        "b": "alt:inst_judge_s:openrouter/google-gemini-2.0-flash",
+        "b": "alt:inst_judge_s:openrouter/google-gemini-3.5-flash",
         "n": 18,
         "percent": 0.833,
         "kappa": 0.78,
@@ -148,7 +148,7 @@
       },
       {
         "a": "inst:inst_judge_s",
-        "b": "alt:inst_judge_s:openrouter/google-gemini-2.0-flash",
+        "b": "alt:inst_judge_s:openrouter/google-gemini-3.5-flash",
         "n": 100,
         "percent": 0.91,
         "kappa": 0.87,
@@ -156,7 +156,7 @@
       },
       {
         "a": "retest:inst_judge_s:1",
-        "b": "alt:inst_judge_s:openrouter/google-gemini-2.0-flash",
+        "b": "alt:inst_judge_s:openrouter/google-gemini-3.5-flash",
         "n": 100,
         "percent": 0.9,
         "kappa": 0.86,

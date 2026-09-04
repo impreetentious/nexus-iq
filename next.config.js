@@ -1,3 +1,4 @@
+// The shell is an iframe host and an /api/* proxy; its CSP governs both roles.
 const contentSecurityPolicy = [
   "default-src 'self'",
   // The static UI's before-paint theme bootstrap is identical in index.html

@@ -102,6 +102,61 @@ test("GET exports/methods?analysisId — traversal id cannot read the key file",
   }
 });
 
+// The guard above validated the id list `analysisIdsFrom` DERIVES, but
+// `?analyses=` won that function's ?? chain while the handler separately
+// re-read the raw `?analysisId=`. Supplying both slipped an unvalidated
+// segment into analyses/<id>.json: the route answered 200 having read a file
+// outside the bundle, and the export of record ledgered a stateHash over it.
+// Note the status assertion is what catches this — a traversal can succeed
+// without ever echoing the file back, so "no SECRET in the body" alone is not
+// sufficient evidence that containment held.
+test("exports/methods — ?analyses= must not let a raw ?analysisId= skip the guard", async () => {
+  for (const ep of ["methods", "methods/preview"]) {
+    for (const id of [...ESCAPES, "../../../config/keys"]) {
+      const url =
+        `${base}/api/projects/${slug}/exports/${ep}` +
+        `?analyses=an_decoy&analysisId=${encodeURIComponent(id)}`;
+      const { status, text } = await bodyOf(await fetch(url));
+      assert.ok(status === 400 || status === 404, `${ep} escape ${id} → ${status}, want 400/404`);
+      assert.ok(!text.includes(SECRET), `${ep} escape ${id} LEAKED the secret`);
+    }
+  }
+});
+
+// A report block's `ref` reaches the same loaders. validateReportBlock checks
+// only the block KIND by design ("shape beyond the kind is the renderer's
+// contract"), so the renderer is the seam that must refuse a traversal ref —
+// whether it arrives inline via ?layout= or from the persisted canvas.
+test("exports/report — a traversal block ref is refused inline and from the canvas", async () => {
+  const trav = "../../../config/keys";
+  for (const kind of ["table", "methods-excerpt"]) {
+    const layout = encodeURIComponent(JSON.stringify([{ kind, ref: trav }]));
+    const { status, text } = await bodyOf(
+      await fetch(`${base}/api/projects/${slug}/exports/report?layout=${layout}`),
+    );
+    assert.ok(status === 400 || status === 404, `?layout ${kind} ref → ${status}, want 400/404`);
+    assert.ok(!text.includes(SECRET), `?layout ${kind} ref LEAKED the secret`);
+  }
+
+  // persisting the hostile ref is allowed (kind-only validation); RENDERING it
+  // must still be refused, with no ?layout= in play
+  const put = await fetch(`${base}/api/projects/${slug}/report`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ blocks: [{ kind: "table", ref: trav }] }),
+  });
+  assert.equal(put.status, 200, "the canvas stores blocks by kind; refs are the renderer's call");
+  const { status, text } = await bodyOf(await fetch(`${base}/api/projects/${slug}/exports/report`));
+  assert.ok(status === 400 || status === 404, `persisted traversal ref → ${status}, want 400/404`);
+  assert.ok(!text.includes(SECRET), "persisted traversal ref LEAKED the secret");
+
+  await fetch(`${base}/api/projects/${slug}/report`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ blocks: [] }),
+  });
+});
+
 test("POST import/confirm — traversal importId cannot read the key file", async () => {
   for (const id of ESCAPES) {
     const { status, text } = await bodyOf(

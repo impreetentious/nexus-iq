@@ -1,3 +1,4 @@
+// The shell renders no UI of its own; this page exists to host the iframe.
 import { useEffect, useRef, useState } from "react";
 
 // The research app is deliberately served as a plain static shell inside the

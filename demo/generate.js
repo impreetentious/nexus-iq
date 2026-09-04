@@ -1,3 +1,4 @@
+// Regenerates the demo corpus. Its output is committed so the demo runs offline.
 // Demo corpus generator — TechCorp exit survey (synthetic, seeded, committed).
 //
 // Run:  node demo/generate.js

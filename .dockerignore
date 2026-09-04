@@ -1,3 +1,4 @@
+# Keep the build context small and free of local state; the image builds from source only.
 node_modules/
 .next/
 out/

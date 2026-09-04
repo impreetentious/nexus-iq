@@ -1,9 +1,9 @@
 {
   "name": "nexus-iq",
-  "version": "2.11.0",
+  "version": "2.11.1",
   "description": "Local-first qualitative text measurement platform.",
   "type": "module",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "private": true,
   "engines": {
     "node": ">=20.19"
@@ -30,7 +30,7 @@
     "concurrently": "^8.0.1",
     "fflate": "^0.8.2",
     "mammoth": "^1.8.0",
-    "next": "^16.1.6",
+    "next": "16.3.3",
     "pdfjs-dist": "^4.10.38",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -40,24 +40,27 @@
     "@axe-core/playwright": "^4.10.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.52.0",
-    "eslint": "^10.0.3",
+    "eslint": "^10.8.0",
     "globals": "^16.5.0",
-    "prettier": "^3.8.1"
+    "prettier": "^3.9.5"
   },
   "overrides": {
-    "brace-expansion": "~5.0.4",
+    "brace-expansion": "~5.0.9",
+    "nanoid": "^3.3.18",
     "next": {
-      "postcss": "^8.5.8",
-      "sharp": "^0.34.5"
-    }
+      "postcss": "^8.5.18",
+      "sharp": "0.35.4"
+    },
+    "sharp": "0.35.4",
+    "@xmldom/xmldom@<=0.8.14": "0.8.15"
   },
   "author": "Sidakpreet Singh",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ItsMonarch04/nexus-iq.git"
+    "url": "git+https://github.com/impreetentious/nexus-iq.git"
   },
   "bugs": {
-    "url": "https://github.com/ItsMonarch04/nexus-iq/issues"
+    "url": "https://github.com/impreetentious/nexus-iq/issues"
   },
-  "homepage": "https://github.com/ItsMonarch04/nexus-iq"
+  "homepage": "https://github.com/impreetentious/nexus-iq"
 }

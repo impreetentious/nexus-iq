@@ -1,3 +1,4 @@
+// Import-not-bundle: lexicons whose licences forbid redistribution are fetched, never vendored.
 // Fetch bundleable lexicons. Run once: node tools/fetch-lexicons.js
 //
 // Downloads the VADER sentiment lexicon (MIT license) from the canonical

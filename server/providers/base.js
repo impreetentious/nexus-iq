@@ -164,15 +164,15 @@ export function malformedResponse(provider, raw) {
 // Live model lists (Anthropic /v1/models, OpenAI /v1/models) carry ids and
 // display names but NEITHER pricing NOR context windows. mergeCatalogPricing
 // reconciles a live id against the adapter's static table by LONGEST-id-prefix
-// (so a dated snapshot like "claude-3-opus-20240229" inherits the bare
-// "claude-3-opus" row), and marks anything it cannot price as an honest
+// (so a dated snapshot like "claude-opus-4-8-20260515" inherits the bare
+// "claude-opus-4-8" row), and marks anything it cannot price as an honest
 // unknown: pricing {0,0}, ctx null, estimate true. The static entry's `family`
 // and `snapshot` are NOT inherited — family stays the live family, and the
 // snapshot is the live id itself.
 //
 // `pricingVerifiedAt` (ISO date on the matched static entry) rides through
 // onto the merged result so callers can flag stale-price adapters — a live
-// live id that inherited "claude-3-opus"'s row inherits its verified date
+// live id that inherited "claude-opus-4-8"'s row inherits its verified date
 // too. Unmatched entries have no verified date to carry, so the field is
 // simply absent (the freshness envelope's staleAfterDays still applies to
 // the whole catalog snapshot).
