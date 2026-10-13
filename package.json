@@ -1,12 +1,12 @@
 {
   "name": "nexus-iq",
-  "version": "2.11.1",
+  "version": "2.11.2",
   "description": "Local-first qualitative text measurement platform.",
   "type": "module",
   "license": "AGPL-3.0-only",
   "private": true,
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "dev": "concurrently \"npm run next:dev\" \"npm run server\"",
@@ -27,22 +27,22 @@
   },
   "dependencies": {
     "busboy": "^1.6.0",
-    "concurrently": "^8.0.1",
-    "fflate": "^0.8.2",
-    "mammoth": "^1.8.0",
-    "next": "16.3.3",
+    "concurrently": "^8.2.2",
+    "fflate": "^0.8.3",
+    "mammoth": "^1.13.0",
+    "next": "16.3.8",
     "pdfjs-dist": "^4.10.38",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "xlsx": "file:./vendor/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.10.1",
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.52.0",
-    "eslint": "^10.8.0",
+    "@playwright/test": "^1.63.0",
+    "eslint": "^10.11.0",
     "globals": "^16.5.0",
-    "prettier": "^3.9.5"
+    "prettier": "^3.9.9"
   },
   "overrides": {
     "brace-expansion": "~5.0.9",

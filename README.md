@@ -61,7 +61,7 @@ Operational documentation:
 
 ## Quick start
 
-Requires Node.js `>=20.19` and npm.
+Requires Node.js `>=22.13.0` and npm.
 
 ```bash
 npm ci
@@ -127,4 +127,4 @@ AGPL-3.0-only © 2024-2026 Sidakpreet Singh — see [LICENSE](LICENSE). Version 
 
 ---
 
-**Version:** v2.11.1
+**Version:** v2.11.2

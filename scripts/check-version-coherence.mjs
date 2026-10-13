@@ -30,8 +30,8 @@ else if (m[1] !== version) {
 }
 
 const EXPECTED = {
-  nvmrc: "20.20.1",
-  engines: ">=20.19",
+  nvmrc: "24.21.0",
+  engines: ">=22.13.0",
   workflows: [".github/workflows/ci.yml", ".github/workflows/release.yml"],
 };
 const nvm = read(".nvmrc").trim();
