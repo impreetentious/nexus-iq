@@ -255,7 +255,7 @@ export class AnthropicAdapter extends Adapter {
   staticCatalog() {
     return STATIC_CATALOG.map((m) => ({
       ...m,
-      pricing: { ...m.pricing },
+      pricing: m.pricing ? { ...m.pricing } : null,
       noTemperature: rejectsSampling(m.id),
     }));
   }
@@ -268,7 +268,10 @@ export class AnthropicAdapter extends Adapter {
   async catalog({ force = false } = {}) {
     if (!this.apiKey) return this.staticCatalog();
     if (!force && this._catalogCache && Date.now() - this._catalogCache.at < CATALOG_TTL_MS) {
-      return this._catalogCache.data.map((m) => ({ ...m, pricing: { ...m.pricing } }));
+      return this._catalogCache.data.map((m) => ({
+        ...m,
+        pricing: m.pricing ? { ...m.pricing } : null,
+      }));
     }
     let live;
     try {
@@ -290,7 +293,7 @@ export class AnthropicAdapter extends Adapter {
       ),
     );
     this._catalogCache = { at: Date.now(), data };
-    return data.map((m) => ({ ...m, pricing: { ...m.pricing } }));
+    return data.map((m) => ({ ...m, pricing: m.pricing ? { ...m.pricing } : null }));
   }
 
   async #fetchModels() {

@@ -191,6 +191,16 @@ export function mergeCatalogPricing(live, statics) {
       ...live,
       ctx: best.ctx ?? null,
       pricing: { ...best.pricing },
+      pricingStatus:
+        Number.isFinite(best.pricing?.inUSDper1M) &&
+        best.pricing.inUSDper1M >= 0 &&
+        Number.isFinite(best.pricing?.outUSDper1M) &&
+        best.pricing.outUSDper1M >= 0
+          ? best.pricing.inUSDper1M === 0 && best.pricing.outUSDper1M === 0
+            ? "free"
+            : "known"
+          : "unavailable",
+      pricingSource: "static-match",
       snapshot: live.snapshot ?? live.id,
       estimate: true, // static pricing is itself an estimate
       ...(best.pricingVerifiedAt ? { pricingVerifiedAt: best.pricingVerifiedAt } : {}),
@@ -199,7 +209,9 @@ export function mergeCatalogPricing(live, statics) {
   return {
     ...live,
     ctx: null,
-    pricing: { inUSDper1M: 0, outUSDper1M: 0 },
+    pricing: null,
+    pricingStatus: "unavailable",
+    pricingSource: null,
     snapshot: live.snapshot ?? live.id,
     estimate: true,
   };

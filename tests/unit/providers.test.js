@@ -841,10 +841,8 @@ describe("AnthropicAdapter.catalog (live)", () => {
           outUSDper1M: 15,
         });
         // unmatched model → {0,0} pricing, ctx null, estimate flag set (honest)
-        assert.deepEqual(byId["claude-flux-9-0-20260601"].pricing, {
-          inUSDper1M: 0,
-          outUSDper1M: 0,
-        });
+        assert.equal(byId["claude-flux-9-0-20260601"].pricing, null);
+        assert.equal(byId["claude-flux-9-0-20260601"].pricingStatus, "unavailable");
         assert.equal(byId["claude-flux-9-0-20260601"].ctx, null);
         assert.equal(byId["claude-flux-9-0-20260601"].estimate, true);
         // capability fields carried so the catalog route stays consistent
@@ -1146,7 +1144,8 @@ describe("OpenAIAdapter.catalog (live)", () => {
         });
         assert.equal(byId["gpt-5-mini-2026-05-01"].snapshot, "gpt-5-mini-2026-05-01");
         // unknown chat model → honest unknown
-        assert.deepEqual(byId["gpt-6-preview"].pricing, { inUSDper1M: 0, outUSDper1M: 0 });
+        assert.equal(byId["gpt-6-preview"].pricing, null);
+        assert.equal(byId["gpt-6-preview"].pricingStatus, "unavailable");
         assert.equal(byId["gpt-6-preview"].ctx, null);
         assert.equal(byId["gpt-6-preview"].estimate, true);
         assert.equal(

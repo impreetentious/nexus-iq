@@ -291,7 +291,7 @@ export class OpenAIAdapter extends Adapter {
   }
 
   staticCatalog() {
-    return STATIC_CATALOG.map((m) => ({ ...m, pricing: { ...m.pricing } }));
+    return STATIC_CATALOG.map((m) => ({ ...m, pricing: m.pricing ? { ...m.pricing } : null }));
   }
 
   // Keyless → static list (and NO network call). Keyed → live GET /v1/models,
@@ -301,7 +301,10 @@ export class OpenAIAdapter extends Adapter {
   async catalog({ force = false } = {}) {
     if (!this.apiKey) return this.staticCatalog();
     if (!force && this._catalogCache && Date.now() - this._catalogCache.at < CATALOG_TTL_MS) {
-      return this._catalogCache.data.map((m) => ({ ...m, pricing: { ...m.pricing } }));
+      return this._catalogCache.data.map((m) => ({
+        ...m,
+        pricing: m.pricing ? { ...m.pricing } : null,
+      }));
     }
     let raw;
     try {
@@ -320,6 +323,6 @@ export class OpenAIAdapter extends Adapter {
         ),
       );
     this._catalogCache = { at: Date.now(), data };
-    return data.map((m) => ({ ...m, pricing: { ...m.pricing } }));
+    return data.map((m) => ({ ...m, pricing: m.pricing ? { ...m.pricing } : null }));
   }
 }

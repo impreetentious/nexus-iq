@@ -7,38 +7,43 @@ import { NexusIQError } from "../core/errors.js";
 
 const CANDIDATES = [",", ";", "\t"];
 
-// Count delimiter occurrences outside quoted regions for one physical line.
-function countOutsideQuotes(line, delim) {
-  let n = 0;
-  let inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') inQ = !inQ;
-    else if (ch === delim && !inQ) n++;
-  }
-  return n;
-}
-
-// Sniff delimiter from the first 20 physical lines: for each candidate take
-// the modal per-line count; score = lines agreeing with a nonzero mode.
+// Sample complete logical records while carrying quote state across physical lines.
 export function sniffDelimiter(text) {
-  const lines = [];
-  let start = 0;
-  for (let i = 0; i < text.length && lines.length < 20; i++) {
-    const c = text[i];
-    if (c === "\n" || c === "\r") {
-      if (i > start) lines.push(text.slice(start, i));
-      if (c === "\r" && text[i + 1] === "\n") i++;
-      start = i + 1;
+  const records = [];
+  let counts = CANDIDATES.map(() => 0);
+  let inQ = false;
+  let nonempty = false;
+  const cap = Math.min(text.length, 262_144);
+  let i = 0;
+  for (; i < cap && records.length < 20; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      nonempty = true;
+      if (inQ && text[i + 1] === '"' && i + 1 < cap) i++;
+      else inQ = !inQ;
+    } else if (!inQ && (ch === "\r" || ch === "\n")) {
+      if (nonempty) records.push(counts);
+      counts = CANDIDATES.map(() => 0);
+      nonempty = false;
+      if (ch === "\r" && text[i + 1] === "\n" && i + 1 < cap) i++;
+    } else {
+      nonempty = true;
+      if (!inQ) {
+        const candidate = CANDIDATES.indexOf(ch);
+        if (candidate >= 0) counts[candidate]++;
+      }
     }
   }
-  if (start < text.length && lines.length < 20) lines.push(text.slice(start));
-  if (lines.length === 0) return ",";
+  if (i === text.length && !inQ && nonempty && records.length < 20) records.push(counts);
+  if (records.length === 0) {
+    if (!nonempty) return null;
+    records.push(counts);
+  }
 
   let best = ",";
   let bestScore = 0;
   for (const d of CANDIDATES) {
-    const counts = lines.map((l) => countOutsideQuotes(l, d));
+    const counts = records.map((r) => r[CANDIDATES.indexOf(d)]);
     const freq = new Map();
     for (const c of counts) freq.set(c, (freq.get(c) || 0) + 1);
     let mode = 0;

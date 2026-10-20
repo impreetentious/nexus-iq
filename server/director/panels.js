@@ -47,6 +47,15 @@ export async function gatherCandidates(project) {
       continue; // offline/unreachable catalog → no candidates from it
     }
     for (const m of cat) {
+      if (
+        !m.pricing ||
+        m.pricingStatus === "unavailable" ||
+        !Number.isFinite(m.pricing.inUSDper1M) ||
+        m.pricing.inUSDper1M < 0 ||
+        !Number.isFinite(m.pricing.outUSDper1M) ||
+        m.pricing.outUSDper1M < 0
+      )
+        continue;
       candidates.push({
         provider: name,
         id: m.id,

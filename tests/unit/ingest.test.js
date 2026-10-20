@@ -1219,3 +1219,35 @@ test("perf: 10k-row CSV full pipeline < 10s", async () => {
   console.log(`perf: 10k-row pipeline took ${ms.toFixed(0)}ms`);
   rmSync(dir, { recursive: true, force: true });
 });
+
+test("csv: delimiter sniff keeps quote state through logical records and bounded samples", async (t) => {
+  const dir = tempDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  for (const delimiter of [",", ";", "\t"]) {
+    for (const newline of ["\n", "\r\n", "\r"]) {
+      const body = ["first", ...Array(25).fill("a;b;c,d,e\tq\tr"), 'last "quoted"'].join(newline);
+      const text = `id${delimiter}text${newline}1${delimiter}"${body.replaceAll('"', '""')}"${newline}`;
+      const file = join(dir, "sample.csv");
+      writeFileSync(file, text);
+      assert.equal(csv.sniffDelimiter(text), delimiter);
+      const { rows } = await csv.parse(file);
+      assert.deepEqual(rows, [{ id: "1", text: body }]);
+    }
+  }
+  assert.equal(csv.sniffDelimiter('id,text\n1,"' + "x;".repeat(150000)), ",");
+  assert.equal(csv.sniffDelimiter("single\ncolumn"), null);
+  assert.equal(csv.sniffDelimiter('id,text\n1,"first\na;b;c\nd;e;f\ng;h;i\nlast"'), ",");
+  const override = join(dir, "override.csv");
+  writeFileSync(override, 'id;text\n1;"a,b,c"');
+  assert.deepEqual((await csv.parse(override, { delimiter: ";" })).rows, [
+    { id: "1", text: "a,b,c" },
+  ]);
+});
+
+test("delimiter sniffing scores the outside-quote prefix when no record completes", async () => {
+  const { sniffDelimiter } = await import("../../server/ingest/csv.js");
+  assert.equal(sniffDelimiter(`header;"${"x".repeat(262_144)}";tail`), ";");
+  assert.equal(sniffDelimiter(`header;${"x".repeat(262_144)};tail`), ";");
+  assert.equal(sniffDelimiter(`header\t"${"x;".repeat(262_144)}"\ttail`), "\t");
+  assert.equal(sniffDelimiter(`"${"x;".repeat(262_144)}"`), null);
+});

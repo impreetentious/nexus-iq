@@ -292,6 +292,8 @@ function deepFreeze(obj) {
 export function freeze(inst, certificate) {
   if (inst.frozen) fail("instrument is already frozen", { id: inst.id });
   plainObject(certificate, "certificate");
+  if (certificate.versionHash !== inst.versionHash)
+    fail("certificate version does not match instrument", { id: inst.id });
   inst.frozen = true;
   inst.certificate = certificate;
   return deepFreeze(inst);

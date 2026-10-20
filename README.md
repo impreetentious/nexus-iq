@@ -7,7 +7,7 @@ The product is built around two modes of work:
 - Fast exploration: import text, inspect the corpus, generate briefs, draft constructs and try instruments quickly.
 - Honest publication: calibrate against human-coded gold data, inspect the evidence behind each result and export reproducible artifacts with clear provenance.
 
-## How it runs
+## How it Runs
 
 Two processes start together:
 
@@ -18,7 +18,7 @@ Project data and provenance live in file-based bundles under `projects/<slug>/`,
 
 Supported corpus inputs: CSV/TSV, XLS/XLSX, DOCX, PDF, TXT/Markdown/HTML, VTT/SRT and transcript JSON.
 
-## Demo flow
+## Demo Flow
 
 No API keys are required for a full local walkthrough. On the Projects screen, choose **Guided MockModel demo**, then **Reset & start demo**. This replaces the `techcorp-exit` demo project, imports the bundled corpus and selects MockModel as the project Director.
 
@@ -30,7 +30,7 @@ No API keys are required for a full local walkthrough. On the Projects screen, c
 
 `MockModel` exists to make the full workflow usable out of the box. It is deterministic, local and clearly labeled as mock output.
 
-## Model providers
+## Model Providers
 
 Nexus IQ supports:
 
@@ -59,7 +59,7 @@ Operational documentation:
 - [Support-bundle redaction](docs/support-bundle.md) — what a diagnostic bundle contains and what it never contains.
 - [Supported viewport policy](docs/viewport-policy.md) — the layout classes the UI targets.
 
-## Quick start
+## Quick Start
 
 Requires Node.js `>=22.13.0` and npm.
 
@@ -127,4 +127,4 @@ AGPL-3.0-only © 2024-2026 Sidakpreet Singh — see [LICENSE](LICENSE). Version 
 
 ---
 
-**Version:** v2.11.2
+**Version:** v2.11.3
