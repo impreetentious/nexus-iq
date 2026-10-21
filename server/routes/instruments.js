@@ -18,7 +18,7 @@ import {
   freeze as freezeInstrument,
 } from "../core/objects.js";
 import { loadProject, updateProject } from "../core/store.js";
-import { newId } from "../core/ids.js";
+import { canonical, sha256, newId } from "../core/ids.js";
 import * as ledger from "../core/ledger.js";
 import { checkBudget } from "../providers/costs.js";
 import * as engineMod from "../runs/engine.js";
@@ -522,30 +522,57 @@ export default [
     method: "POST",
     pattern: "/api/projects/:p/instruments/:i/freeze",
     handler: async (req, res, params) => {
-      const project = await loadProject(params.p);
-      const instrument = findOr404(project.instruments, params.i, "instrument");
-      if (instrument.frozen)
-        throw new NexusIQError("VALIDATION", "instrument is already frozen", { id: params.i });
-      const construct = constructOf(project, instrument);
+      let project, instrument, construct, goldset, units, capturedIdentity;
+      const identityOf = (inst, cons, gs, selected) => ({
+        instrumentId: inst.id,
+        versionHash: inst.versionHash,
+        payloadHash: sha256(canonical(inst.payload)),
+        constructHash: sha256(canonical(cons)),
+        goldsetHash: sha256(canonical(gs)),
+        units: [...selected.values()].map((u) => ({ id: u.id, textHash: sha256(u.text ?? "") })),
+        modelIdentity:
+          inst.kind === "panel"
+            ? inst.payload.jurors.map((j) => ({
+                provider: j.provider,
+                model: j.model,
+                snapshot: j.snapshot ?? null,
+              }))
+            : {
+                provider: inst.payload.provider ?? null,
+                model: inst.payload.model ?? null,
+                snapshot: inst.payload.snapshot ?? null,
+              },
+      });
       const body = requireBody(req, ["goldsetId"]);
-      const goldset = await readGoldset(params.p, body.goldsetId);
-      if (goldset.constructId !== instrument.constructId) {
-        throw new NexusIQError(
-          "VALIDATION",
-          "gold set and instrument measure different constructs",
-          {
-            goldsetConstruct: goldset.constructId,
-            instrumentConstruct: instrument.constructId,
-          },
-        );
-      }
-      if (!goldset.humanAgreement) {
-        throw new NexusIQError(
-          "VALIDATION",
-          "human agreement has not been computed for this gold set — run the agreement step first (human reliability is established before any machine comparison)",
-          { goldsetId: body.goldsetId },
-        );
-      }
+      await updateProject(params.p, async (p) => {
+        project = structuredClone(p);
+        instrument = findOr404(project.instruments, params.i, "instrument");
+        if (instrument.frozen)
+          throw new NexusIQError("VALIDATION", "instrument is already frozen", { id: params.i });
+        construct = constructOf(project, instrument);
+        goldset = await readGoldset(params.p, body.goldsetId);
+        if (goldset.constructId !== instrument.constructId) {
+          throw new NexusIQError(
+            "VALIDATION",
+            "gold set and instrument measure different constructs",
+            {
+              goldsetConstruct: goldset.constructId,
+              instrumentConstruct: instrument.constructId,
+            },
+          );
+        }
+        if (!goldset.humanAgreement) {
+          throw new NexusIQError(
+            "VALIDATION",
+            "human agreement has not been computed for this gold set; run the agreement step first (human reliability is established before any machine comparison)",
+            { goldsetId: body.goldsetId },
+          );
+        }
+        units = await unitsById(project, [...goldLabelMap(goldset).keys()], {
+          corpusId: goldset.corpusId,
+        });
+        capturedIdentity = identityOf(instrument, construct, goldset, units);
+      });
       const gold = goldLabelMap(goldset);
       if (gold.size === 0) {
         throw new NexusIQError(
@@ -556,7 +583,7 @@ export default [
       }
 
       // the machine side: judge the gold units NOW with this instrument
-      const units = await unitsById(project, [...gold.keys()], { corpusId: goldset.corpusId });
+
       if (units.size === 0) {
         throw new NexusIQError(
           "VALIDATION",
@@ -594,19 +621,57 @@ export default [
         humanAgreement: goldset.humanAgreement,
         versionHash: instrument.versionHash,
         modelPinned: modelPinnedOf(instrument),
+        provenance: capturedIdentity,
+        coverage: {
+          attempted: units.size,
+          selected: gold.size,
+          missingSource: gold.size - units.size,
+          missingOutput: units.size - rows.length / 2,
+          comparable: rows.length / 2,
+        },
       };
 
-      await updateProject(params.p, (p) => {
-        const inst = (p.instruments ?? []).find((x) => x.id === params.i);
-        if (!inst)
-          throw new NexusIQError("NOT_FOUND", `instrument '${params.i}' vanished`, {
-            id: params.i,
-          });
-        if (inst.frozen)
-          throw new NexusIQError("VALIDATION", "instrument is already frozen", { id: params.i });
-        inst.level = "calibrated"; // before freeze(): the object is immutable afterwards
-        freezeInstrument(inst, certificate);
-      });
+      try {
+        await updateProject(params.p, async (p) => {
+          const inst = (p.instruments ?? []).find((x) => x.id === params.i);
+          const conflict = () =>
+            new NexusIQError(
+              "INPUTS_CHANGED",
+              "Calibration inputs changed while inference ran. Review current inputs and retry calibration.",
+              {
+                instrumentId: params.i,
+                provenance: capturedIdentity,
+                incurredUSD: eph.cost?.actualUSD ?? 0,
+              },
+              { status: 409 },
+            );
+          if (!inst || inst.frozen) throw conflict();
+          let current;
+          try {
+            const currentConstruct = constructOf(p, inst);
+            const currentGold = await readGoldset(params.p, body.goldsetId);
+            if (!(p.goldsets ?? []).some((g) => g.id === body.goldsetId)) throw conflict();
+            const currentUnits = await unitsById(p, [...gold.keys()], {
+              corpusId: currentGold.corpusId,
+            });
+            current = identityOf(inst, currentConstruct, currentGold, currentUnits);
+          } catch {
+            throw conflict();
+          }
+          if (canonical(current) !== canonical(capturedIdentity)) throw conflict();
+          inst.level = "calibrated"; // before freeze(): the object is immutable afterwards
+          freezeInstrument(inst, certificate);
+        });
+      } catch (err) {
+        await ledger.append(
+          pdirOf(params.p),
+          "system",
+          "instrument.calibration-rejected",
+          { instrumentId: params.i, goldsetId: body.goldsetId },
+          { provenance: capturedIdentity, cost: eph.cost, code: err.code },
+        );
+        throw err;
+      }
       await ledger.append(
         pdirOf(params.p),
         "human",

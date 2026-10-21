@@ -1,3 +1,4 @@
+import instrumentsRoutes from "../../server/routes/instruments.js";
 // Engine, store, monitor, and object-boundary hardening regressions:
 //
 //   1  forEachUnit stops EVERY worker when one fn throws — no paid provider
@@ -512,50 +513,65 @@ test("appendNdjson serializes heal+append per file and preserves concurrent line
 // 5 — pricingFor warns on a priced-provider catalog failure (no silent $0)
 // =============================================================================
 
-test("a priced-provider catalog failure surfaces a cost-tracking warning", async (t) => {
+test("unavailable paid pricing refuses before reservation and inference", async (t) => {
   resetMock();
   t.after(resetMock);
-  const slug = "pricing-warn";
-  const N = 6;
-  const { project } = await setup(slug, { units: makeUnits(N), instruments: [judgeInstrument()] });
-
-  // Make the mock look like a PRICED (non-local) provider whose catalog fetch
-  // fails — exactly the real-fetch-failure case pricingFor must flag.
-  mock.capabilities = () => ({
-    structuredOutput: true,
-    pinning: true,
-    batch: false,
-    local: false,
-    family: "mock",
-  });
-  mock.catalog = async () => {
-    throw new NexusIQError("PROVIDER_UNREACHABLE", "catalog fetch failed", {});
+  mock.capabilities = () => ({ local: false });
+  let calls = 0;
+  mock.complete = async () => {
+    calls++;
+    throw new Error("must not dispatch");
   };
-  t.after(() => {
-    delete mock.capabilities;
-    delete mock.catalog;
+  const { project } = await setup("pricing-refuse", {
+    units: makeUnits(2),
+    instruments: [judgeInstrument({}, { model: "unpriced-new" })],
   });
+  for (const pricing of [
+    null,
+    {},
+    { inUSDper1M: -1, outUSDper1M: 2 },
+    { inUSDper1M: NaN, outUSDper1M: 2 },
+  ]) {
+    mock.catalog = async () => [{ id: "unpriced-new", pricing }];
+    await assert.rejects(engineMod.createRun(project, { instrumentId: "inst_j", corpusId: "c1" }), {
+      code: "PRICING_UNAVAILABLE",
+    });
+    await assert.rejects(engineMod.runEphemeral(project, project.instruments[0], makeUnits(1)), {
+      code: "PRICING_UNAVAILABLE",
+    });
+  }
+  mock.catalog = async () => {
+    throw new Error("offline");
+  };
+  await assert.rejects(engineMod.createRun(project, { instrumentId: "inst_j", corpusId: "c1" }), {
+    code: "PRICING_UNAVAILABLE",
+  });
+  assert.equal(calls, 0);
+  assert.equal((await loadProject(project.slug)).runs.length, 0);
+});
 
-  const run = await engineMod.createRun(project, { instrumentId: "inst_j", corpusId: "c1" });
-  let lastTick = null;
-  const done = await engineMod.executeRun(slug, run.id, {
-    onTick: (s) => {
-      lastTick = s;
+test("known estimated rates survive catalog failure with provenance", async (t) => {
+  resetMock();
+  t.after(resetMock);
+  mock.capabilities = () => ({ local: false });
+  mock.catalog = async () => [
+    {
+      id: "priced-fixture",
+      estimate: true,
+      pricingVerifiedAt: "2026-10-01",
+      pricing: { inUSDper1M: 1, outUSDper1M: 2 },
     },
-  });
-
-  assert.equal(
-    done.status,
-    "complete",
-    "metering falls back to $0 but the run still completes (no crash)",
-  );
-  assert.equal(done.cost.actualUSD, 0, "the $0 fallback is preserved");
-  assert.ok(
-    lastTick.warnings.some(
-      (w) => w.kind === "pricing-unavailable" && /cost tracking unavailable/i.test(w.message),
-    ),
-    "the run surfaces 'cost tracking unavailable' instead of a silent, misleading $0",
-  );
+  ];
+  const rates = await engineMod.pricingFor(mock, "priced-fixture");
+  assert.equal((rates.inUSDper1M * 1000 + rates.outUSDper1M * 1000) / 1e6, 0.003);
+  assert.equal(rates.status, "known");
+  mock.catalog = async () => {
+    throw new Error("offline");
+  };
+  const cached = await engineMod.pricingFor(mock, "priced-fixture");
+  assert.equal(cached.source, "cached-match");
+  assert.equal(cached.pricingVerifiedAt, "2026-10-01");
+  assert.equal(cached.estimate, true);
 });
 
 test("a genuinely free local provider prices at zero without a spurious warning", async (t) => {
@@ -757,4 +773,191 @@ test("createProjectIfAbsent refuses a corrupt existing bundle", async () => {
   // the corrupt file is untouched
   const raw = await readFile(path.join(dir, "project.json"), "utf8");
   assert.equal(raw, "{ this is not json", "the corrupt bundle was left exactly as it was");
+});
+
+test("resume uses immutable prompt/construct and refuses changed unit text or missing legacy recipe", async (t) => {
+  resetMock();
+  t.after(resetMock);
+  const { project, pdir } = await setup("recipe-resume", {
+    units: makeUnits(2),
+    instruments: [judgeInstrument()],
+  });
+  const run = await engineMod.createRun(project, { instrumentId: "inst_j", corpusId: "c1" });
+  const prompts = [];
+  const originalComplete = mock.complete.bind(mock);
+  mock.complete = async (req) => {
+    prompts.push(JSON.stringify(req));
+    return originalComplete(req);
+  };
+  let stop = false;
+  await engineMod.executeRun(project.slug, run.id, {
+    concurrency: 1,
+    shouldStop: () => (stop ? "pause" : null),
+    onTick: (tick) => {
+      if (tick.done >= 1) stop = true;
+    },
+  });
+  await updateProject(project.slug, (p) => {
+    p.instruments[0].payload.promptTemplate = "PROMPT B {{unit}}";
+    p.instruments[0].versionHash = "different";
+    p.constructs[0].definition = "CONSTRUCT B";
+  });
+  await engineMod.executeRun(project.slug, run.id, { concurrency: 1 });
+  assert.equal(prompts.length, 2);
+  assert.ok(prompts.every((p) => !p.includes("PROMPT B") && !p.includes("CONSTRUCT B")));
+  const lines = await readNdjson(path.join(pdir, "runs", run.id, "outputs.ndjson"));
+  assert.ok(lines.every((line) => line.recipeHash === run.recipeHash));
+  const current = await loadProject(project.slug);
+  const copied = { ...current.runs[0], id: "legacy", status: "paused" };
+  delete copied.executionRecipe;
+  await assert.rejects(engineMod.executionInputs(current, copied), { code: "RECIPE_UNAVAILABLE" });
+  await writeFile(
+    path.join(pdir, "corpora", "c1", "units.ndjson"),
+    makeUnits(2)
+      .map((u) => JSON.stringify({ ...u, text: "changed" }))
+      .join("\n") + "\n",
+  );
+  await assert.rejects(engineMod.executionInputs(current, current.runs[0]), {
+    code: "INPUTS_CHANGED",
+  });
+});
+
+test("calibration rejects changed snapshot inputs and retains incurred spend", async (t) => {
+  const freeze = routeHandler(instrumentsRoutes, "POST", "/api/projects/:p/instruments/:i/freeze");
+  for (const change of [
+    "instrument",
+    "construct",
+    "gold",
+    "text",
+    "delete",
+    "concurrent",
+    "unchanged",
+  ]) {
+    await t.test(change, async () => {
+      resetMock();
+      const units = makeUnits(2);
+      const { project, pdir } = await setup(`calibration-${change}`, {
+        units,
+        instruments: [judgeInstrument()],
+      });
+      const gs = {
+        id: "gs_cal",
+        constructId: "c_bin",
+        corpusId: "c1",
+        sample: units.map((u) => ({ unitId: u.id, pi: 1 })),
+        adjudicated: Object.fromEntries(units.map((u) => [u.id, ORACLE(u.text)])),
+        humanAgreement: { n: 2, percent: 1, alpha: 1 },
+      };
+      const goldFile = path.join(pdir, "gold", "gs_cal.json");
+      await mkdir(path.dirname(goldFile), { recursive: true });
+      await writeFile(goldFile, JSON.stringify(gs));
+      await updateProject(project.slug, (p) => {
+        p.goldsets.push({ id: gs.id });
+      });
+      mock.catalog = async () => [{ id: "mock-1", pricing: { inUSDper1M: 1, outUSDper1M: 2 } }];
+      let entered, release;
+      const ready = new Promise((r) => {
+        entered = r;
+      });
+      const hold = new Promise((r) => {
+        release = r;
+      });
+      const original = Object.getPrototypeOf(mock).complete.bind(mock);
+      mock.complete = async (req) => {
+        entered();
+        await hold;
+        return original(req);
+      };
+      const pending = freeze({ body: { goldsetId: gs.id } }, null, {
+        p: project.slug,
+        i: "inst_j",
+      });
+      await ready;
+      if (change === "instrument")
+        await updateProject(project.slug, (p) => {
+          p.instruments[0].payload.promptTemplate += "B";
+          p.instruments[0].versionHash = "B";
+        });
+      if (change === "construct")
+        await updateProject(project.slug, (p) => {
+          p.constructs[0].definition += "B";
+        });
+      if (change === "gold")
+        await updateProject(project.slug, async () => {
+          gs.adjudicated[units[0].id] = "other";
+          await writeFile(goldFile, JSON.stringify(gs));
+        });
+      if (change === "text")
+        await updateProject(project.slug, async () => {
+          await writeFile(
+            path.join(pdir, "corpora", "c1", "units.ndjson"),
+            units.map((u) => JSON.stringify({ ...u, text: "B" })).join("\n") + "\n",
+          );
+        });
+      if (change === "delete")
+        await updateProject(project.slug, (p) => {
+          p.instruments = [];
+        });
+      let concurrent;
+      if (change === "concurrent")
+        concurrent = freeze({ body: { goldsetId: gs.id } }, null, { p: project.slug, i: "inst_j" });
+      release();
+      if (change === "unchanged") {
+        const certificate = await pending;
+        assert.equal(certificate.versionHash, project.instruments[0].versionHash);
+        assert.equal(certificate.coverage.comparable, 2);
+      } else if (change === "concurrent") {
+        const outcomes = await Promise.allSettled([pending, concurrent]);
+        assert.equal(outcomes.filter((o) => o.status === "fulfilled").length, 1);
+        assert.equal(outcomes.find((o) => o.status === "rejected").reason.status, 409);
+      } else {
+        await assert.rejects(pending, (err) => err.code === "INPUTS_CHANGED" && err.status === 409);
+        const after = await loadProject(project.slug);
+        assert.ok(!after.instruments[0]?.frozen);
+        assert.ok(after.budget.spentUSD > 0);
+      }
+      resetMock();
+    });
+  }
+});
+
+test("Director escalation retains pinned rates and refuses unknown current pricing", async (t) => {
+  resetMock();
+  t.after(resetMock);
+  const { callDirector, directorCosts } = await import("../../server/director/director.js");
+  const { escalationSchema } = await import("../../server/director/prompts.js");
+  const construct = binaryConstruct();
+  const { project } = await setup("director-rate-floor", {
+    units: makeUnits(1),
+    instruments: [judgeInstrument()],
+  });
+  project.director = { provider: "mock", model: "director-fixture" };
+  mock.capabilities = () => ({ local: false });
+  mock.catalog = async () => [
+    { id: "director-fixture", pricing: { inUSDper1M: 1, outUSDper1M: 4 } },
+  ];
+  let calls = 0,
+    used;
+  mock.complete = async () => {
+    calls++;
+    return {
+      json: { label: "yes", confidence: 1, reason: "Same", rationale: "Fixture" },
+      usage: { inputTokens: 1000, outputTokens: 1000 },
+    };
+  };
+  const options = {
+    messages: [{ role: "user", content: "Fixture" }],
+    schema: escalationSchema(construct),
+    pinnedPricing: { inUSDper1M: 3, outUSDper1M: 2 },
+    onPricing: (rates) => {
+      used = rates;
+    },
+  };
+  await callDirector(project, options);
+  assert.equal(directorCosts(project).usd, 0.007);
+  assert.equal(used.inUSDper1M, 3);
+  assert.equal(used.outUSDper1M, 4);
+  mock.catalog = async () => [{ id: "director-fixture", pricing: null }];
+  await assert.rejects(callDirector(project, options), { code: "PRICING_UNAVAILABLE" });
+  assert.equal(calls, 1);
 });

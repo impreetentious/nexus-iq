@@ -1,3 +1,4 @@
+import { instrumentVersionHash } from "../core/objects.js";
 // Runs: preflight (estimate only — nothing persists), start (budget gate →
 // engine.createRun → background executeRun with Director escalation and the
 // drift tripwire armed on calibrated instruments), live monitor (SSE),
@@ -65,7 +66,7 @@ function jurorPayloadsOf(instrument) {
   return []; // dictionary: local, $0
 }
 
-async function estimateInstrument(project, instrument, units) {
+async function estimateInstrument(project, instrument, units, pinnedPricing) {
   if (instrument.kind === "dictionary") {
     return {
       calls: units.length,
@@ -83,8 +84,14 @@ async function estimateInstrument(project, instrument, units) {
     let pricing = { inUSDper1M: 0, outUSDper1M: 0 };
     try {
       const { adapter } = getAdapter(project, j.provider);
-      const cat = await adapter.catalog().catch(() => []);
-      pricing = cat.find((e) => e.id === j.model || e.snapshot === j.model)?.pricing ?? pricing;
+      pricing = await engineMod.pricingFor(adapter, j.model);
+      const pinned = pinnedPricing?.[instrumentVersionHash(j)];
+      if (pinned)
+        pricing = {
+          ...pricing,
+          inUSDper1M: Math.max(pricing.inUSDper1M, pinned.inUSDper1M),
+          outUSDper1M: Math.max(pricing.outUSDper1M, pinned.outUSDper1M),
+        };
     } catch (err) {
       if (err?.code === "PRIVACY_BLOCKED") {
         privacyOk = false;
@@ -355,10 +362,12 @@ async function launchRun(params, { resume = false } = {}) {
 }
 
 async function launchRunValidated(params, runId, slot, resume) {
-  const project = await loadProject(params.p);
+  let project = await loadProject(params.p);
   const run = findOr404(project.runs, runId, "run");
-  const instrument = findOr404(project.instruments, run.instrumentId, "instrument");
-  const construct = findOr404(project.constructs, instrument.constructId, "construct");
+  const inputs = await engineMod.executionInputs(project, run);
+  project = inputs.project;
+  const instrument = inputs.instrument;
+  const construct = project.constructs[0];
   if (run.status === "complete") {
     throw new NexusIQError("VALIDATION", `run '${run.id}' is already complete`, { runId: run.id });
   }
@@ -381,7 +390,7 @@ async function launchRunValidated(params, runId, slot, resume) {
     ),
   );
   const remaining = units.filter((u) => !doneIds.has(u.id));
-  const est = await estimateInstrument(project, instrument, remaining);
+  const est = await estimateInstrument(project, instrument, remaining, run.executionRecipe.pricing);
   let reservation = false;
   try {
     reservation = (await reserveRunBudget(params.p, run.id, est.estUSD)).reserved;
@@ -449,7 +458,7 @@ export default [
       const project = await loadProject(params.p);
       const body = requireBody(req, ["instrumentId", "corpusId"]);
       const instrument = findOr404(project.instruments, body.instrumentId, "instrument");
-      const construct = findOr404(project.constructs, instrument.constructId, "construct");
+      findOr404(project.constructs, instrument.constructId, "construct");
       const corpus = findOr404(project.corpora, body.corpusId, "corpus");
 
       // privacy: constructing the adapters is the gate (403 on strict violations)
@@ -487,8 +496,11 @@ export default [
         { reserveProjectBudget: true },
       );
       try {
-        await armDrift(project, instrument, run.id);
-        const escalate = project.director ? makeEscalator(project, construct) : undefined;
+        const inputs = await engineMod.executionInputs(project, run);
+        await armDrift(inputs.project, inputs.instrument, run.id);
+        const escalate = inputs.project.director
+          ? makeEscalator(inputs.project, inputs.project.constructs[0])
+          : undefined;
         startExecution(params.p, run.id, { escalate });
         return { runId: run.id, estUSD: run.cost.estUSD, total: run.checkpoint.total };
       } catch (err) {

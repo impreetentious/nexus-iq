@@ -572,8 +572,8 @@ export default [
       });
       gs.corpusId = corpusId;
       gs.createdAt = new Date().toISOString();
-      await writeGoldset(params.p, gs);
-      await updateProject(params.p, (p) => {
+      await updateProject(params.p, async (p) => {
+        await writeGoldset(params.p, gs);
         p.goldsets.push(metaOf(gs));
       });
       await ledger.append(

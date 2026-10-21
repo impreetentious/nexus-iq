@@ -413,7 +413,7 @@ test("a deterministic Director fault (SCHEMA_INVALID) skips the second opinion â
   );
 });
 
-test("a throw that escapes the engine before terminal persistence still settles the disk record at failed (never stuck running)", async () => {
+test("resume uses the saved instrument kind when the current instrument kind changes", async () => {
   const slug = "esc-backstop";
   const { project } = await setup(slug, { units: makeUnits(6), instruments: [judgeInstrument()] });
   mock.setAccuracy(1.0);
@@ -442,9 +442,9 @@ test("a throw that escapes the engine before terminal persistence still settles 
     if (settled.status !== "running") break;
     await sleep(50);
   }
-  assert.equal(settled.status, "failed", "the disk record never sticks at running");
-  assert.equal(settled.error.code, "VALIDATION");
-  assert.ok(settled.error.message.length > 0);
+  assert.equal(settled.status, "complete", "the saved runnable instrument is used");
+  assert.equal(settled.executionRecipe.instrument.kind, "judge");
+  assert.equal((await readNdjson(outputsFile(slug, run.id))).length, 6);
 });
 
 // =============================================================================

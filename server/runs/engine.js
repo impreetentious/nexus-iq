@@ -75,6 +75,7 @@ import {
 import * as ledger from "../core/ledger.js";
 import * as cache from "../core/cache.js";
 import { createRun as newRunObject, instrumentVersionHash } from "../core/objects.js";
+import { canonical, sha256 } from "../core/ids.js";
 import { getAdapter } from "../providers/registry.js";
 import { Pool } from "../providers/base.js";
 import { estimateRun, meter, checkBudget } from "../providers/costs.js";
@@ -97,6 +98,7 @@ const DIRECTOR_PAUSE_CODES = new Set([
   "PROVIDER_UNREACHABLE",
   "PROVIDER_HTTP",
   "RATE_LIMITED_EXHAUSTED",
+  "PRICING_UNAVAILABLE",
 ]);
 
 // Quarantine entries carry their reasons: {unitId, code, message} (message
@@ -228,28 +230,101 @@ function p99Length(units) {
   return lens[lo] + (lens[hi] - lens[lo]) * (pos - lo);
 }
 
-// catalog pricing for a model on an adapter (id or snapshot match); $0 fallback.
-// On a catalog FETCH failure for a non-local (priced) provider, the $0 fallback
-// silently zeroes the whole run's metering — run.cost stays $0 and the cap
-// never trips. We keep the $0 (metering must not crash on a catalog blip) but
-// flag it via onCatalogFail so the caller can surface "cost tracking
-// unavailable" instead of a misleading $0. Genuinely-free local providers
-// (mock, ollama: capabilities().local) legitimately price at $0 and never warn.
-async function pricingFor(adapter, model, { onCatalogFail } = {}) {
+// Unpriced paid models never enter dispatch or budget reservation.
+const knownPrices = new WeakMap();
+export async function pricingFor(adapter, model) {
+  const local = adapter.capabilities?.().local === true;
+  let hit;
+  let cached = false;
   try {
     const entries = await adapter.catalog();
-    const hit = entries.find((e) => e.id === model || e.snapshot === model);
-    return hit?.pricing ?? { inUSDper1M: 0, outUSDper1M: 0 };
-  } catch (err) {
-    let local = false;
-    try {
-      local = adapter.capabilities?.().local === true;
-    } catch {
-      /* default: treat as priced */
-    }
-    if (!local) onCatalogFail?.(err);
-    return { inUSDper1M: 0, outUSDper1M: 0 };
+    hit = entries.find((e) => e.id === model || e.snapshot === model);
+  } catch {
+    hit = knownPrices.get(adapter)?.get(model);
+    cached = Boolean(hit);
   }
+  const p = hit?.pricing;
+  if (
+    hit?.pricingStatus === "unavailable" ||
+    !p ||
+    !Number.isFinite(p.inUSDper1M) ||
+    p.inUSDper1M < 0 ||
+    !Number.isFinite(p.outUSDper1M) ||
+    p.outUSDper1M < 0
+  ) {
+    if (local) return { inUSDper1M: 0, outUSDper1M: 0, status: "free", source: "local" };
+    throw new NexusIQError(
+      "PRICING_UNAVAILABLE",
+      "Model pricing is unavailable; refresh the catalog or select a priced model before starting or resuming.",
+      { model },
+    );
+  }
+  if (!cached) {
+    if (!knownPrices.has(adapter)) knownPrices.set(adapter, new Map());
+    const previous = knownPrices.get(adapter).get(model);
+    const observedAt =
+      previous && canonical(previous.pricing) === canonical(hit.pricing)
+        ? previous.observedAt
+        : nowISO();
+    hit = { ...hit, observedAt };
+    knownPrices.get(adapter).set(model, hit);
+  }
+  return {
+    ...p,
+    status: p.inUSDper1M === 0 && p.outUSDper1M === 0 ? "free" : "known",
+    source: cached ? "cached-match" : (hit.pricingSource ?? "catalog-match"),
+    pricingVerifiedAt: hit.pricingVerifiedAt ?? null,
+    observedAt: hit.observedAt ?? nowISO(),
+    estimate: hit.estimate === true,
+    cached,
+  };
+}
+
+export async function executionInputs(project, run, { dir } = {}) {
+  const recipe = run.executionRecipe;
+  if (
+    !recipe ||
+    recipe.format !== 1 ||
+    sha256(canonical(recipe)) !== run.recipeHash ||
+    recipe.instrument?.versionHash !== run.versionHash ||
+    instrumentVersionHash(recipe.instrument?.payload) !== run.versionHash ||
+    recipe.construct?.id !== recipe.instrument?.constructId ||
+    !Array.isArray(recipe.units)
+  ) {
+    throw new NexusIQError(
+      "RECIPE_UNAVAILABLE",
+      "This incomplete run has no valid immutable execution recipe. Its outputs remain available; start a new run.",
+      { runId: run.id },
+    );
+  }
+  const current = await loadUnits(
+    projectDir(project.slug, dir ?? projectsDir()),
+    run.corpusId,
+    run.unitFilter,
+  );
+  const byId = new Map(current.map((u) => [u.id, u]));
+  const units = recipe.units.map((expected) => {
+    const unit = byId.get(expected.id);
+    if (!unit || sha256(unit.text ?? "") !== expected.textHash) {
+      throw new NexusIQError(
+        "INPUTS_CHANGED",
+        "Saved corpus text changed or disappeared; start a new run.",
+        { unitId: expected.id, runId: run.id },
+        { status: 409 },
+      );
+    }
+    return unit;
+  });
+  if (recipe.director?.provider) {
+    await pricingFor(getAdapter(project, recipe.director.provider).adapter, recipe.director.model);
+  }
+  const instrument = structuredClone(recipe.instrument);
+  const executionProject = {
+    ...project,
+    constructs: [structuredClone(recipe.construct)],
+    director: structuredClone(recipe.director),
+  };
+  return { instrument, project: executionProject, units };
 }
 
 // ---------------------------------------------------------------- dictionary
@@ -340,7 +415,7 @@ async function forEachUnit(units, concurrency, fn) {
 async function buildContext(
   project,
   instrument,
-  { seedOffset = null, concurrency = DEFAULT_CONCURRENCY, dir } = {},
+  { seedOffset = null, concurrency = DEFAULT_CONCURRENCY, dir, recipe } = {},
 ) {
   const construct = constructOf(project, instrument);
   const jurors = jurorsOf(instrument);
@@ -363,7 +438,6 @@ async function buildContext(
     // of a silent $0. runEphemeral has no monitor and ignores them.
     pricingWarnings: [],
   };
-  const pricingWarned = new Set();
   for (const j of jurors) {
     const provider = j.payload?.provider;
     if (typeof provider !== "string" || provider === "") {
@@ -378,19 +452,16 @@ async function buildContext(
       adapters.set(provider, entry);
     }
     const snapshot = j.payload.snapshot ?? j.payload.model ?? "unpinned";
-    const pricing = await pricingFor(entry.adapter, j.payload.model, {
-      onCatalogFail: () => {
-        const dedupeKey = `${provider}|${j.payload.model}`;
-        if (pricingWarned.has(dedupeKey)) return;
-        pricingWarned.add(dedupeKey);
-        ctx.pricingWarnings.push({
-          kind: "pricing-unavailable",
-          message: `cost tracking unavailable — pricing catalog failed for ${provider}/${j.payload.model ?? "?"}; metered cost may read $0`,
-          provider,
-          model: j.payload.model ?? null,
-        });
-      },
-    });
+    const currentPricing = await pricingFor(entry.adapter, j.payload.model);
+    const pinned = recipe?.pricing?.[j.hash];
+    const pricing = pinned
+      ? {
+          ...currentPricing,
+          inUSDper1M: Math.max(currentPricing.inUSDper1M, pinned.inUSDper1M),
+          outUSDper1M: Math.max(currentPricing.outUSDper1M, pinned.outUSDper1M),
+          pinnedPricing: pinned,
+        }
+      : currentPricing;
     ctx.jurorInfo.set(j.hash, {
       payload:
         seedOffset === null
@@ -417,7 +488,7 @@ async function buildContext(
       pricing,
       // seed participates in the cache namespace: distinct seeds are distinct
       // measurements and must never alias each other's cached outputs.
-      cacheSnapshot: seedOffset === null ? snapshot : `${snapshot}#seed:${seedOffset}`,
+      cacheSnapshot: canonical({ snapshot, seedOffset, construct, payload: j.payload }),
     });
   }
   ctx.privacyEvents = [...adapters.values()].map((e) => e.ledgerEvent).filter(Boolean);
@@ -428,7 +499,11 @@ async function buildContext(
 // Returns the output line fields (without unitId). Throws taxonomy errors.
 async function callJuror(ctx, jurorHash, unit) {
   const info = ctx.jurorInfo.get(jurorHash);
-  const key = cache.key(unit.text, jurorHash, info.cacheSnapshot);
+  const key = cache.key(
+    unit.text,
+    jurorHash,
+    canonical({ snapshot: info.cacheSnapshot, recipeHash: ctx.recipeHash ?? null }),
+  );
   const cached = await cache.get(ctx.pdir, key);
   if (cached) {
     const out = {
@@ -548,7 +623,7 @@ async function maybeEscalate(ctx, unit, final, { escalate, p99 }) {
 
   final.escalated = true;
   if (typeof escalate === "function") {
-    const replacement = await escalate(unit, cleanLine(final));
+    const replacement = await escalate(unit, cleanLine(final), ctx.escalationPricing);
     if (replacement && typeof replacement === "object") {
       if (replacement.label !== undefined) {
         final.label = replacement.label;
@@ -597,6 +672,7 @@ export async function createRun(
 
   const pdir = projectDir(project.slug, dir ?? projectsDir());
   const units = await loadUnits(pdir, corpusId, unitFilter);
+  const recipePricing = {};
 
   // identity fields on the run record
   let provider, model, snapshot, pinned;
@@ -623,11 +699,13 @@ export async function createRun(
   let est = { calls: 0, inputTokens: 0, outputTokens: 0, estUSD: 0 };
   for (const j of jurors) {
     const { adapter } = getAdapter(project, j.payload.provider);
+    const pricing = await pricingFor(adapter, j.payload.model);
+    recipePricing[j.hash] = pricing;
     const e = estimateRun({
       units,
       template: j.payload.promptTemplate ?? "",
       maxTokens: j.payload.params?.maxTokens ?? 256,
-      pricing: await pricingFor(adapter, j.payload.model),
+      pricing,
       concurrency: DEFAULT_CONCURRENCY,
     });
     est = {
@@ -654,6 +732,22 @@ export async function createRun(
     pinned,
   });
   run.capUSD = capUSD ?? null;
+  const directorPricing = project.director?.provider
+    ? await pricingFor(
+        getAdapter(project, project.director.provider).adapter,
+        project.director.model,
+      )
+    : null;
+  run.executionRecipe = structuredClone({
+    format: 1,
+    instrument,
+    construct: constructOf(project, instrument),
+    director: project.director ?? null,
+    directorPricing,
+    units: units.map((u) => ({ id: u.id, textHash: sha256(u.text ?? "") })),
+    pricing: recipePricing,
+  });
+  run.recipeHash = sha256(canonical(run.executionRecipe));
 
   await updateProject(
     project.slug,
@@ -776,33 +870,34 @@ export async function executeRun(projectSlug, runId, opts = {}) {
 async function executeRunInner(project, run, opts) {
   const slug = project.slug;
   const dir = opts.dir;
-  const instrument = findOrThrow(project.instruments, run.instrumentId, "instrument");
+  const inputs = await executionInputs(project, run, { dir });
+  const instrument = inputs.instrument;
+  project = inputs.project;
+  const units = inputs.units;
   const ctx = await buildContext(project, instrument, {
     concurrency: opts.concurrency ?? DEFAULT_CONCURRENCY,
     dir,
+    recipe: run.executionRecipe,
   });
+  ctx.escalationPricing = {
+    pinnedPricing: run.executionRecipe.directorPricing,
+    onPricing: (pricing) => {
+      run.dispatchPricing ??= [];
+      run.dispatchPricing.push({ at: nowISO(), director: pricing });
+    },
+  };
+  ctx.recipeHash = run.recipeHash;
+  ctx.finalJurorHash = finalJurorOfRun(run, instrument);
+  run.dispatchPricing = [
+    ...(run.dispatchPricing ?? []),
+    {
+      at: nowISO(),
+      rates: Object.fromEntries([...ctx.jurorInfo].map(([hash, info]) => [hash, info.pricing])),
+    },
+  ];
   const pdir = ctx.pdir;
   const outputsFile = path.join(pdir, "runs", run.id, "outputs.ndjson");
 
-  // Pin the run to the version it STARTED under (see finalJurorOfRun): the
-  // done-set, the cache keys and every new line key on run.versionHash, so an
-  // instrument edit between sessions can neither blank a complete run's
-  // outputs nor force a resume to re-bill finished units. Panels are
-  // untouched: their finals key the constant "aggregate" line and per-juror
-  // lines keep per-juror payload hashes.
-  if (instrument.kind !== "panel") {
-    const pinnedHash = run.versionHash ?? instrument.versionHash;
-    ctx.finalJurorHash = pinnedHash;
-    if (instrument.kind === "judge" && ctx.jurors[0]?.hash !== pinnedHash) {
-      const j = ctx.jurors[0];
-      const info = ctx.jurorInfo.get(j.hash);
-      ctx.jurorInfo.delete(j.hash);
-      ctx.jurorInfo.set(pinnedHash, info);
-      ctx.jurors = [{ ...j, hash: pinnedHash }];
-    }
-  }
-
-  const units = await loadUnits(pdir, run.corpusId, run.unitFilter);
   const p99 = p99Length(units);
   const capUSD = opts.capUSD ?? run.capUSD ?? null;
 
@@ -949,7 +1044,7 @@ async function executeRunInner(project, run, opts) {
         return false;
       }
       for (const line of result.newLines) {
-        await outputAppender.append(cleanLine(line));
+        await outputAppender.append({ ...cleanLine(line), recipeHash: run.recipeHash });
       }
       if (result.quarantined) {
         quarantine.set(unit.id, quarantineEntry(unit.id, result.error));
@@ -988,7 +1083,7 @@ async function executeRunInner(project, run, opts) {
           });
         }
         if (escalated) run.escalation.count += 1;
-        await outputAppender.append(cleanLine(final));
+        await outputAppender.append({ ...cleanLine(final), recipeHash: run.recipeHash });
         // This unit just produced a durable verdict line. If a PRIOR session
         // quarantined it (a transient that has since cleared on resume), drop the
         // stale quarantine entry: otherwise the unit ends with BOTH a verdict

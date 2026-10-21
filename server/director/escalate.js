@@ -27,11 +27,12 @@ const same = (a, b) => labelKey(a) === labelKey(b);
 // makeEscalator(project, construct) → async (unit, output) → Output | null
 export function makeEscalator(project, construct) {
   const schema = escalationSchema(construct);
-  return async function escalate(unit, output) {
+  return async function escalate(unit, output, pricingOptions = {}) {
     const { system, user } = escalationPrompt({ construct, unit, output });
     let res;
     try {
       res = await callDirector(project, {
+        ...pricingOptions,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },

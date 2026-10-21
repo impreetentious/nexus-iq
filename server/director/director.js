@@ -14,6 +14,7 @@ import path from "node:path";
 import { NexusIQError } from "../core/errors.js";
 import { getAdapter } from "../providers/registry.js";
 import { completeWithRepair, Pool, withTruncationRetry } from "../providers/base.js";
+import { pricingFor } from "../runs/engine.js";
 import { meter } from "../providers/costs.js";
 import { readNdjson, projectDir, writeFileAtomic } from "../core/store.js";
 import { sha256 } from "../core/ids.js";
@@ -43,26 +44,9 @@ export function directorCosts(project) {
   return { calls: m.calls, inputTokens: t.inputTokens, outputTokens: t.outputTokens, usd: t.usd };
 }
 
-// Pricing for the director model, looked up once per (provider, model) from
-// the adapter's catalog. A failed catalog (e.g. Ollama offline) degrades to
-// zero pricing — tokens are still metered, dollars read 0 for local backends
-// anyway.
-const pricingCache = new Map();
-
+// Use the same admission rule for escalation and worker calls.
 async function directorPricing(adapter, slot) {
-  const key = `${slot.provider} ${slot.model}`;
-  if (pricingCache.has(key)) return pricingCache.get(key);
-  let pricing = { inUSDper1M: 0, outUSDper1M: 0 };
-  try {
-    const cat = await adapter.catalog();
-    const entry = cat.find((m) => m.id === slot.model || m.snapshot === slot.model);
-    if (entry?.pricing) pricing = entry.pricing;
-  } catch {
-    // unreachable catalog → keep zero pricing; the call itself will surface
-    // any real connectivity problem
-  }
-  pricingCache.set(key, pricing);
-  return pricing;
+  return pricingFor(adapter, slot.model);
 }
 
 // ---------------------------------------------------------------- the call
@@ -76,7 +60,15 @@ export { withTruncationRetry };
 
 export async function callDirector(
   project,
-  { messages, schema, maxTokens = DEFAULT_MAX_TOKENS, temperature = 0, seed } = {},
+  {
+    messages,
+    schema,
+    maxTokens = DEFAULT_MAX_TOKENS,
+    temperature = 0,
+    seed,
+    pinnedPricing,
+    onPricing,
+  } = {},
 ) {
   const slot = project?.director;
   if (!slot || !slot.provider || !slot.model) {
@@ -128,7 +120,16 @@ export async function callDirector(
   // would double-count). Attempts that THREW without returning a usage object
   // remain unmeterable (the provider-layer boundary).
   const m = meterFor(project);
-  const pricing = await directorPricing(adapter, slot);
+  const currentPricing = await directorPricing(adapter, slot);
+  const pricing = pinnedPricing
+    ? {
+        ...currentPricing,
+        inUSDper1M: Math.max(currentPricing.inUSDper1M, pinnedPricing.inUSDper1M),
+        outUSDper1M: Math.max(currentPricing.outUSDper1M, pinnedPricing.outUSDper1M),
+        pinnedPricing,
+      }
+    : currentPricing;
+  onPricing?.(pricing);
 
   let res;
   try {
