@@ -1453,8 +1453,8 @@ test("replication: reproduce.py embeds Nexus IQ's exact stored numbers and the D
     "numpy/pandas imports missing",
   );
   assert.ok(py.includes("assert"), "reproduce.py must assert equality");
-  assert.ok(py.includes('read_csv("outputs/run_1.csv")'));
-  assert.ok(py.includes('read_csv("gold/gs_gold.csv")'));
+  assert.ok(py.includes('read_exact("outputs/run_1.csv")'));
+  assert.ok(py.includes('read_exact("gold/gs_gold.csv")'));
 });
 
 test("replication: reproduce.R targets the dsl package and references only columns that exist", async () => {
@@ -1469,9 +1469,9 @@ test("replication: reproduce.R targets the dsl package and references only colum
     r.includes('sample_prob = "pi"'),
     "dsl() must use the recorded inclusion probabilities",
   );
-  assert.ok(r.includes('read.csv("outputs/run_1.csv"'));
-  assert.ok(r.includes('read.csv("gold/gs_gold.csv"'));
-  assert.ok(r.includes('read.csv("units/corp_demo.csv"'));
+  assert.ok(r.includes('read_exact("outputs/run_1.csv"'));
+  assert.ok(r.includes('read_exact("gold/gs_gold.csv"'));
+  assert.ok(r.includes('read_exact("units/corp_demo.csv"'));
   assert.ok(
     r.includes(F.expected.sales.est.toFixed(6)),
     "Nexus IQ's number missing from R comments",

@@ -1,6 +1,6 @@
 {
   "name": "nexus-iq",
-  "version": "2.11.4",
+  "version": "2.11.5",
   "description": "Local-first qualitative text measurement platform.",
   "type": "module",
   "license": "AGPL-3.0-only",

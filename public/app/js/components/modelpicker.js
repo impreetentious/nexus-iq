@@ -246,7 +246,9 @@ export function render({
             el(
               "span",
               { title: "price per 1M tokens, in/out (USD)" },
-              `$${entry.pricing?.inUSDper1M ?? 0}/$${entry.pricing?.outUSDper1M ?? 0}`,
+              entry.pricing && entry.pricingStatus !== "unavailable"
+                ? `$${entry.pricing.inUSDper1M}/$${entry.pricing.outUSDper1M}`
+                : "pricing unavailable",
             ),
             ...capBadges(entry),
           ),

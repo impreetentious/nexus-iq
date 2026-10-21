@@ -110,7 +110,8 @@ test("mergeCatalogPricing propagates pricingVerifiedAt from the matched static e
   const unpriced = mergeCatalogPricing({ id: "bar-2", name: "Bar", family: "test" }, statics);
   assert.equal(unpriced.pricingVerifiedAt, undefined);
   assert.equal(unpriced.estimate, true);
-  assert.equal(unpriced.pricing.inUSDper1M, 0);
+  assert.equal(unpriced.pricing, null);
+  assert.equal(unpriced.pricingStatus, "unavailable");
 });
 
 async function ok(url) {

@@ -33,7 +33,7 @@ function fail(message, details = {}) {
 export function csvField(v) {
   if (v === null || v === undefined) return "";
   let s = Array.isArray(v) ? v.join("; ") : String(v);
-  if (typeof v !== "number" && typeof v !== "boolean" && /^[=+\-@]/.test(s)) s = `'${s}`;
+  if (typeof v !== "number" && typeof v !== "boolean" && /^[ \t\r\n]*[=+\-@']/.test(s)) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -237,9 +237,11 @@ function readmeMd(project, analyses, includeGoldText, uncovered = [], regPlans =
   lines.push("");
   lines.push("CSV conventions: unit-meta columns are prefixed `meta_` so merges can never");
   lines.push("collide with unitId/label/pi/adjudicated. To block spreadsheet formula");
-  lines.push("injection, any TEXT cell beginning with =, +, - or @ carries a leading");
-  lines.push("apostrophe (') — strip it when consuming such cells as raw text; numeric");
-  lines.push("cells are never prefixed.");
+  lines.push("injection, text whose first non-whitespace character is =, +, -, @ or an");
+  lines.push("apostrophe carries one extra apostrophe before the entire original cell.");
+  lines.push("MANIFEST.json declares textEscaping: apostrophe-prefix. Decode exactly one");
+  lines.push("prefix only when its remainder matches that trigger; preserve whitespace.");
+  lines.push("Numeric/boolean cells remain unchanged. Old undeclared escapes are ambiguous.");
   lines.push("");
   lines.push("## Contents");
   lines.push("");
@@ -412,6 +414,42 @@ function rScript(plans, project, uncovered = [], regPlans = []) {
   L.push("# stopifnot verification above it.");
   L.push(`# Project: ${project.name} (${project.id})`);
   L.push('#   install.packages("dsl")');
+  L.push(
+    'manifest <- paste(readLines("MANIFEST.json", warn = FALSE, encoding = "UTF-8"), collapse = "\\n")',
+  );
+  L.push(
+    'if (!grepl(\'"textEscaping"[[:space:]]*:[[:space:]]*"apostrophe-prefix"\', manifest)) stop("Unsupported or absent text escaping declaration")',
+  );
+  L.push("decode_text <- function(value) {");
+  L.push(
+    '  escaped <- startsWith(value, "\'") & grepl("^[ \\t\\r\\n]*[=+@\'\\\\-]", substring(value, 2), perl = TRUE)',
+  );
+  L.push("  value[escaped] <- substring(value[escaped], 2)");
+  L.push("  value");
+  L.push("}");
+  L.push("read_exact <- function(file) {");
+  L.push('  text <- rawToChar(readBin(file, "raw", n = file.info(file)$size))');
+  L.push('  Encoding(text) <- "UTF-8"');
+  L.push('  token <- "\\uE000NEXUS_CR\\uE001"');
+  L.push('  while (grepl(token, text, fixed = TRUE)) token <- paste0(token, "_")');
+  L.push('  chars <- strsplit(text, "", fixed = TRUE)[[1]]');
+  L.push("  quoted <- FALSE");
+  L.push("  for (i in seq_along(chars)) {");
+  L.push("    if (chars[i] == '\"') quoted <- !quoted");
+  L.push('    else if (quoted && chars[i] == "\\r") chars[i] <- token');
+  L.push("  }");
+  L.push(
+    '  d <- read.csv(text = paste0(chars, collapse = ""), colClasses = "character", na.strings = NULL, check.names = FALSE, strip.white = FALSE)',
+  );
+  L.push('  d[] <- lapply(d, function(value) gsub(token, "\\r", value, fixed = TRUE))');
+  L.push("  d[] <- lapply(d, decode_text)");
+  L.push('  if ("pi" %in% names(d)) {');
+  L.push("    d$pi <- suppressWarnings(as.numeric(d$pi))");
+  L.push("    d$pi[!is.finite(d$pi) | d$pi <= 0 | d$pi > 1] <- NA_real_");
+  L.push("  }");
+  L.push("  d");
+  L.push("}");
+
   L.push("");
   if (uncovered.length > 0) {
     L.push(...coverageComment(uncovered));
@@ -432,13 +470,9 @@ function rScript(plans, project, uncovered = [], regPlans = []) {
     L.push(
       `# ---- analysis ${p.id}: DSL-corrected proportion of ${p.outcome}${p.groupBy ? ` by ${p.groupBy}` : ""} ----`,
     );
-    L.push(`outputs <- read.csv("outputs/${p.runId}.csv", check.names = FALSE)  # machine labels`);
-    L.push(
-      `units   <- read.csv("units/${p.corpusId}.csv", check.names = FALSE) # unit meta (meta_ prefixed)`,
-    );
-    L.push(
-      `gold    <- read.csv("gold/${p.goldsetId}.csv", check.names = FALSE) # designed gold subsample with pi`,
-    );
+    L.push(`outputs <- read_exact("outputs/${p.runId}.csv")  # machine labels`);
+    L.push(`units   <- read_exact("units/${p.corpusId}.csv") # unit meta (meta_ prefixed)`);
+    L.push(`gold    <- read_exact("gold/${p.goldsetId}.csv") # designed gold subsample with pi`);
     L.push(`# Panel runs write one row per juror per unit PLUS one row with juror ==`);
     L.push(`# "aggregate" — the panel's aggregated verdict, which is the label Nexus IQ`);
     L.push(`# analyzes. Keep only aggregate rows, or the merges below duplicate units.`);
@@ -511,7 +545,7 @@ function rScript(plans, project, uncovered = [], regPlans = []) {
         const k = i + 1;
         L.push(
           col
-            ? `ps <- d$pseudo[as.character(d[["${col}"]]) == ${JSON.stringify(c.group)}]`
+            ? `ps <- d$pseudo[as.character(d[[${JSON.stringify(col)}]]) == ${JSON.stringify(c.group)}]`
             : "ps <- d$pseudo",
         );
         L.push(`est_${k} <- mean(ps)`);
@@ -525,7 +559,9 @@ function rScript(plans, project, uncovered = [], regPlans = []) {
       const ia = p.cells.findIndex((c) => c.group === p.diff.a) + 1;
       const ib = p.cells.findIndex((c) => c.group === p.diff.b) + 1;
       if (ia > 0 && ib > 0) {
-        L.push(`# corrected difference ${p.diff.a} - ${p.diff.b} (independent groups)`);
+        L.push(
+          `# corrected difference ${JSON.stringify(p.diff.a)} - ${JSON.stringify(p.diff.b)} (independent groups)`,
+        );
         L.push(`est_diff <- est_${ia} - est_${ib}`);
         L.push(`se_diff <- sqrt(se_${ia}^2 + se_${ib}^2)`);
         L.push(
@@ -537,12 +573,12 @@ function rScript(plans, project, uncovered = [], regPlans = []) {
     L.push("# Nexus IQ stored (DSL pseudo-outcome mean, HC0 sandwich SE):");
     for (const c of p.cells) {
       L.push(
-        `#   ${p.groupBy ?? (p.mode === "perCell" ? "label" : "all")}=${c.group}: est = ${c.est.toFixed(6)}, se = ${c.se.toFixed(6)}, 95% CI [${c.ciLo.toFixed(6)}, ${c.ciHi.toFixed(6)}]`,
+        `#   ${JSON.stringify(p.groupBy ?? (p.mode === "perCell" ? "label" : "all"))}=${JSON.stringify(c.group)}: est = ${c.est.toFixed(6)}, se = ${c.se.toFixed(6)}, 95% CI [${c.ciLo.toFixed(6)}, ${c.ciHi.toFixed(6)}]`,
       );
     }
     if (p.diff) {
       L.push(
-        `#   difference ${p.diff.a} - ${p.diff.b}: est = ${p.diff.est.toFixed(6)}, se = ${p.diff.se.toFixed(6)}`,
+        `#   difference ${JSON.stringify(p.diff.a)} - ${JSON.stringify(p.diff.b)}: est = ${p.diff.est.toFixed(6)}, se = ${p.diff.se.toFixed(6)}`,
       );
     }
     L.push("");
@@ -569,16 +605,18 @@ function rScript(plans, project, uncovered = [], regPlans = []) {
       if (p.diff && p.cells.length === 2) {
         const flips = ref === p.diff.a;
         L.push(
-          `# relative to the ${p.diff.a} - ${p.diff.b} contrast: here the reference is "${ref}",`,
+          `# relative to the ${JSON.stringify(p.diff.a)} - ${JSON.stringify(p.diff.b)} contrast: here the reference is ${JSON.stringify(ref)},`,
         );
         L.push(
           flips
-            ? `# so the treatment-coded slope estimates ${p.diff.b} - ${p.diff.a} — the NEGATIVE of`
-            : `# so the treatment-coded slope estimates ${p.diff.a} - ${p.diff.b} — the same sign as`,
+            ? `# so the treatment-coded slope estimates ${JSON.stringify(p.diff.b)} - ${JSON.stringify(p.diff.a)} - the NEGATIVE of`
+            : `# so the treatment-coded slope estimates ${JSON.stringify(p.diff.a)} - ${JSON.stringify(p.diff.b)} - the same sign as`,
         );
         L.push("# the difference verified above.");
       } else {
-        L.push(`# relative to a reported contrast (the reference here would be "${ref}").`);
+        L.push(
+          `# relative to a reported contrast (the reference here would be ${JSON.stringify(ref)}).`,
+        );
       }
     }
     L.push(`d$${p.outcome}_pred <- d$yhat   # binarized machine label (prediction)`);
@@ -613,13 +651,9 @@ function rScript(plans, project, uncovered = [], regPlans = []) {
     L.push(
       `# ---- analysis ${q.id}: DSL-corrected ${kindName} regression of indicator(label == ${JSON.stringify(q.positive)}) on ${q.xKeys.join(", ")} ----`,
     );
-    L.push(`outputs <- read.csv("outputs/${q.runId}.csv", check.names = FALSE)  # machine labels`);
-    L.push(
-      `units   <- read.csv("units/${q.corpusId}.csv", check.names = FALSE) # unit meta (meta_ prefixed)`,
-    );
-    L.push(
-      `gold    <- read.csv("gold/${q.goldsetId}.csv", check.names = FALSE) # designed gold subsample with pi`,
-    );
+    L.push(`outputs <- read_exact("outputs/${q.runId}.csv")  # machine labels`);
+    L.push(`units   <- read_exact("units/${q.corpusId}.csv") # unit meta (meta_ prefixed)`);
+    L.push(`gold    <- read_exact("gold/${q.goldsetId}.csv") # designed gold subsample with pi`);
     L.push(`# Panel runs: keep only juror == "aggregate" rows (the analyzed labels),`);
     L.push(`# and drop empty-label rows (flagged no-consensus aggregates).`);
     L.push(`if ("juror" %in% names(outputs)) outputs <- subset(outputs, juror == "aggregate")`);
@@ -747,9 +781,32 @@ function pyScript(plans, project, uncovered = [], regPlans = []) {
   L.push(`Project: ${project.name} (${project.id}). Requires numpy and pandas.`);
   L.push('"""');
   L.push("import math");
+  L.push("import json");
+  L.push("import re");
+  L.push('with open("MANIFEST.json", encoding="utf-8") as stream:');
+  L.push('    if json.load(stream).get("textEscaping") != "apostrophe-prefix":');
+  L.push('        raise ValueError("Unsupported or absent text escaping declaration")');
+
   L.push("");
   L.push("import numpy as np");
   L.push("import pandas as pd");
+  L.push("");
+  L.push("def decode_text(value):");
+  L.push('    if value.startswith(chr(39)) and re.match(r"^[ \\t\\r\\n]*[=+\\-@\']", value[1:]):');
+  L.push("        return value[1:]");
+  L.push("    return value");
+  L.push("");
+  L.push("def read_exact(file):");
+  L.push("    data = pd.read_csv(file, dtype=str, keep_default_na=False)");
+  L.push("    for column in data.columns:");
+  L.push("        data[column] = data[column].map(decode_text)");
+  L.push('    if "pi" in data.columns:');
+  L.push('        data["pi"] = pd.to_numeric(data["pi"], errors="coerce")');
+  L.push(
+    '        data.loc[~np.isfinite(data["pi"]) | (data["pi"] <= 0) | (data["pi"] > 1), "pi"] = np.nan',
+  );
+  L.push("    return data");
+
   L.push("");
   L.push("");
   L.push("def dsl_proportion(yhat, y, pi):");
@@ -767,9 +824,8 @@ function pyScript(plans, project, uncovered = [], regPlans = []) {
   L.push("");
   L.push("");
   L.push("def label_text(series):");
-  L.push('    """Labels compare as strings; whole-number floats normalize (1.0 -> "1")."""');
-  L.push("    s = series.astype(str).str.strip()");
-  L.push('    return s.str.replace(r"\\.0$", "", regex=True)');
+  L.push('    """Label identity is exact; missing join cells remain empty."""');
+  L.push('    return series.fillna("").astype(str)');
   L.push("");
   L.push("");
   L.push("def check(name, got, want, tol=1e-6):");
@@ -852,7 +908,7 @@ function pyScript(plans, project, uncovered = [], regPlans = []) {
       `# ---- analysis ${p.id}: corrected proportion of ${p.outcome}${p.groupBy ? ` by ${p.groupBy}` : ""} ----`,
     );
     L.push(`print("analysis ${p.id}")`);
-    L.push(`outputs = pd.read_csv("outputs/${p.runId}.csv")`);
+    L.push(`outputs = read_exact("outputs/${p.runId}.csv")`);
     L.push("# Panel runs write one row per juror per unit PLUS one row with");
     L.push('# juror == "aggregate" — the panel\'s aggregated verdict, which is the label');
     L.push("# Nexus IQ analyzes. Keep only aggregate rows, or the merges below would");
@@ -862,14 +918,14 @@ function pyScript(plans, project, uncovered = [], regPlans = []) {
     L.push("# Aggregate rows for flagged (no-consensus) units carry NO label; Nexus IQ");
     L.push("# analyzes only labeled units, so drop empty-label rows before merging.");
     L.push('outputs = outputs[outputs["label"].notna() & (label_text(outputs["label"]) != "")]');
-    L.push(`units = pd.read_csv("units/${p.corpusId}.csv")  # unit meta (meta_ prefixed)`);
-    L.push(`gold = pd.read_csv("gold/${p.goldsetId}.csv")`);
+    L.push(`units = read_exact("units/${p.corpusId}.csv")  # unit meta (meta_ prefixed)`);
+    L.push(`gold = read_exact("gold/${p.goldsetId}.csv")`);
     L.push('d = outputs.merge(units, on="unitId").merge(');
     L.push('    gold[["unitId", "adjudicated", "pi"]], on="unitId", how="left")');
     L.push("# Gold rows for the corrected estimator need BOTH a recorded gold label AND");
     L.push("# a recorded design pi: hand-queued units ship with an empty pi and stay");
     L.push("# out of the correction, exactly as in Nexus IQ.");
-    L.push('on_gold = d["adjudicated"].notna() & d["pi"].notna()');
+    L.push('on_gold = d["adjudicated"].notna() & (d["adjudicated"] != "") & d["pi"].notna()');
     if (p.design === "uncertainty") {
       L.push("# NOTE: this analysis's gold sample was drawn by uncertainty targeting; the");
       L.push("# recorded pi is nominal n/N over a deterministic uncertainty ranking, so");
@@ -916,17 +972,23 @@ function pyScript(plans, project, uncovered = [], regPlans = []) {
       L.push('    est, se = dsl_proportion(sub["yhat"], sub["y"], sub["pi"])');
     }
     const groupKey = p.groupBy ?? (p.mode === "perCell" ? "label" : "cell");
-    L.push('    check(f"' + groupKey + '={group} est", est, want_est)');
-    L.push('    check(f"' + groupKey + '={group} se", se, want_se)');
+    L.push(`    check(${JSON.stringify(groupKey)} + f"={group} est", est, want_est)`);
+    L.push(`    check(${JSON.stringify(groupKey)} + f"={group} se", se, want_se)`);
     L.push("    cells[group] = (est, se)");
     if (p.diff) {
-      L.push(`# corrected difference ${p.diff.a} - ${p.diff.b} (independent groups)`);
+      L.push(
+        `# corrected difference ${JSON.stringify(p.diff.a)} - ${JSON.stringify(p.diff.b)} (independent groups)`,
+      );
       L.push(`est = cells[${JSON.stringify(p.diff.a)}][0] - cells[${JSON.stringify(p.diff.b)}][0]`);
       L.push(
         `se = math.sqrt(cells[${JSON.stringify(p.diff.a)}][1] ** 2 + cells[${JSON.stringify(p.diff.b)}][1] ** 2)`,
       );
-      L.push(`check("diff ${p.diff.a}-${p.diff.b} est", est, ${String(p.diff.est)})`);
-      L.push(`check("diff ${p.diff.a}-${p.diff.b} se", se, ${String(p.diff.se)})`);
+      L.push(
+        `check(${JSON.stringify(`diff ${p.diff.a}-${p.diff.b} est`)}, est, ${String(p.diff.est)})`,
+      );
+      L.push(
+        `check(${JSON.stringify(`diff ${p.diff.a}-${p.diff.b} se`)}, se, ${String(p.diff.se)})`,
+      );
     }
     L.push("");
   }
@@ -936,14 +998,14 @@ function pyScript(plans, project, uncovered = [], regPlans = []) {
       `# ---- analysis ${q.id}: DSL-corrected ${kindName} regression of indicator(label == ${JSON.stringify(q.positive)}) on ${q.xKeys.join(", ")} ----`,
     );
     L.push(`print("analysis ${q.id}")`);
-    L.push(`outputs = pd.read_csv("outputs/${q.runId}.csv")`);
+    L.push(`outputs = read_exact("outputs/${q.runId}.csv")`);
     L.push("# Panel runs: keep only the aggregate rows (the analyzed labels), and drop");
     L.push("# empty-label rows (flagged no-consensus aggregates).");
     L.push('if "juror" in outputs.columns:');
     L.push('    outputs = outputs[outputs["juror"] == "aggregate"]');
     L.push('outputs = outputs[outputs["label"].notna() & (label_text(outputs["label"]) != "")]');
-    L.push(`units = pd.read_csv("units/${q.corpusId}.csv")  # unit meta (meta_ prefixed)`);
-    L.push(`gold = pd.read_csv("gold/${q.goldsetId}.csv")`);
+    L.push(`units = read_exact("units/${q.corpusId}.csv")  # unit meta (meta_ prefixed)`);
+    L.push(`gold = read_exact("gold/${q.goldsetId}.csv")`);
     L.push('d = outputs.merge(units, on="unitId").merge(');
     L.push('    gold[["unitId", "adjudicated", "pi"]], on="unitId", how="left")');
     L.push("# Usable rows: Nexus IQ's computeModel drops units whose covariates are not");
@@ -957,7 +1019,7 @@ function pyScript(plans, project, uncovered = [], regPlans = []) {
     L.push('yhat = (label_text(d["label"]) == positive).to_numpy(dtype=float)');
     L.push("# Gold rows need BOTH a recorded gold label AND a recorded design pi:");
     L.push("# hand-queued units (empty pi) stay out, exactly as in Nexus IQ.");
-    L.push('on_gold = d["adjudicated"].notna() & d["pi"].notna()');
+    L.push('on_gold = d["adjudicated"].notna() & (d["adjudicated"] != "") & d["pi"].notna()');
     L.push(
       'y = np.where(on_gold, (label_text(d["adjudicated"]) == positive).astype(float), np.nan)',
     );
@@ -1118,6 +1180,7 @@ export async function build(project, analysisIds, { projectDir, includeGoldText 
   for (const p of [...members.keys()].sort()) files[p] = sha256(members.get(p));
   const manifest = {
     format: "nexus-iq-replication/1",
+    textEscaping: "apostrophe-prefix",
     generator: "nexus-iq",
     projectId: project.id,
     projectName: project.name,

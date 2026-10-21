@@ -567,7 +567,7 @@ test("scripts binarize with the recorded positive value and filter empty-label r
     "py empty-label filter missing",
   );
   assert.ok(
-    py.includes('d["adjudicated"].notna() & d["pi"].notna()'),
+    py.includes('d["adjudicated"].notna() & (d["adjudicated"] != "") & d["pi"].notna()'),
     "py gold-row mask (label AND pi) missing",
   );
 
@@ -693,6 +693,120 @@ function pythonWithPandas() {
   return null;
 }
 const PYTHON = pythonWithPandas();
+const RSCRIPT = spawnSync("Rscript", ["--version"], { encoding: "utf8" }).status === 0;
+
+test(
+  "the generated reproduce.R executes proportions and corrected regressions",
+  { skip: RSCRIPT ? false : "Rscript not available" },
+  async () => {
+    const files = await buildZip(null, ["an_pos", "an_desc", "an_model", "an_ols"], {
+      includeGoldText: false,
+    });
+    const work = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-honesty-r-"));
+    try {
+      for (const [member, bytes] of Object.entries(files)) {
+        const target = path.join(work, member);
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, Buffer.from(bytes));
+      }
+      const run = spawnSync("Rscript", ["reproduce.R"], {
+        cwd: work,
+        encoding: "utf8",
+        timeout: 120000,
+      });
+      assert.equal(run.status, 0, `reproduce.R failed:\n${run.stdout}\n${run.stderr}`);
+      for (const id of ["an_pos", "an_desc", "an_model", "an_ols"])
+        assert.ok(run.stdout.includes(`OK: analysis ${id}`), `${id} was not executed`);
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "emitted scripts preserve exact labels and IDs against hand-derived proportions",
+  { skip: PYTHON && RSCRIPT ? false : "Python with pandas and Rscript required" },
+  async () => {
+    const pairs = [
+      ["-1", "'-1"],
+      ["=x", "NA"],
+      ["001", "1.0"],
+      ["  -1  ", "-1"],
+      ["NULL", "NA"],
+      ['a\r\n"b', "a b"],
+    ];
+    const root = await mkdtemp(path.join(os.tmpdir(), "nexus-iq-exact-text-"));
+    try {
+      for (const [index, [positive, negative]] of pairs.entries()) {
+        const dir = path.join(root, String(index));
+        const project = structuredClone(A.project);
+        const ids = ["'id", "001", "  id  ", "\t@id"];
+        const labels = [positive, positive, negative, negative];
+        await mkdir(path.join(dir, "runs", "run_h"), { recursive: true });
+        await mkdir(path.join(dir, "corpora", "corp_h"), { recursive: true });
+        await writeFile(
+          path.join(dir, "runs", "run_h", "run.json"),
+          JSON.stringify({
+            id: "run_h",
+            corpusId: "corp_h",
+            instrumentId: "inst_h",
+            status: "complete",
+          }),
+        );
+        await writeFile(
+          path.join(dir, "runs", "run_h", "outputs.ndjson"),
+          ids
+            .map((unitId, i) => JSON.stringify({ unitId, label: labels[i], juror: "aggregate" }))
+            .join("\n") + "\n",
+        );
+        await writeFile(
+          path.join(dir, "corpora", "corp_h", "units.ndjson"),
+          ids
+            .map((id) => JSON.stringify({ id, text: "Synthetic", meta: { value: -1 } }))
+            .join("\n") + "\n",
+        );
+        const gold = project.goldsets.find((g) => g.id === "gs_h");
+        gold.sample = ids.map((unitId) => ({ unitId, pi: 1 }));
+        gold.adjudicated = Object.fromEntries(ids.map((id, i) => [id, labels[i]]));
+        const original = project.analyses.find((a) => a.id === "an_desc");
+        // Complete gold equals the machine labels: pseudo outcomes are 1,1,0,0.
+        // Their mean is 1/2; sqrt(mean((y-1/2)^2)/4) is 1/4.
+        project.analyses = [
+          {
+            ...original,
+            results: {
+              ...original.results,
+              cells: [
+                { group: positive, n: 4, est: 0.5, se: 0.25, ciLo: 0.01, ciHi: 0.99, naive: 0.5 },
+              ],
+            },
+          },
+        ];
+        const { zipBuffer } = await replication.build(project, ["an_desc"], { projectDir: dir });
+        const archive = path.join(dir, "archive");
+        for (const [member, bytes] of Object.entries(unzipSync(zipBuffer))) {
+          const target = path.join(archive, member);
+          await mkdir(path.dirname(target), { recursive: true });
+          await writeFile(target, bytes);
+        }
+        for (const [exe, script] of [
+          [PYTHON, "reproduce.py"],
+          ["Rscript", "reproduce.R"],
+        ]) {
+          const run = spawnSync(exe, [script], { cwd: archive, encoding: "utf8", timeout: 120000 });
+          assert.equal(
+            run.status,
+            0,
+            `${script}, ${JSON.stringify(positive)}:\n${run.stdout}\n${run.stderr}`,
+          );
+          assert.ok(run.stdout.includes("OK") && run.stdout.includes("an_desc"));
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test(
   "the generated reproduce.py EXECUTES end-to-end against the archive — proportions AND corrected regressions",
@@ -1362,5 +1476,26 @@ test("route: ?goldText=0 ships gold labels and pi without the unit text", async 
   assert.ok(
     strFromU8(filesNo["README.md"]).includes("Unit text was withheld at export"),
     "README must state the withholding",
+  );
+});
+
+test("replication CSV escapes exact labels reversibly and declares exact-text readers", async () => {
+  const labels = ["-1", "'-1", "=x", "NA", "001", "1.0", "  -1  ", "\t@x", "'id", 'a\r\n"b'];
+  const decode = (value) =>
+    value.startsWith("'") && /^[ \t\r\n]*[=+\-@']/.test(value.slice(1)) ? value.slice(1) : value;
+  for (const value of labels) {
+    const cell = replication.csvField(value);
+    const unquoted = cell.startsWith('"') ? cell.slice(1, -1).replaceAll('""', '"') : cell;
+    assert.equal(decode(unquoted), value);
+  }
+  assert.notEqual(replication.csvField("-1"), replication.csvField("'-1"));
+  const { zipBuffer, manifest } = await replication.build(A.project, ["an_pos"], {
+    projectDir: A.dir,
+  });
+  assert.equal(manifest.textEscaping, "apostrophe-prefix");
+  const files = unzipSync(zipBuffer);
+  assert.ok(strFromU8(files["reproduce.py"]).includes("dtype=str, keep_default_na=False"));
+  assert.ok(
+    strFromU8(files["reproduce.R"]).includes('colClasses = "character", na.strings = NULL'),
   );
 });

@@ -127,4 +127,4 @@ AGPL-3.0-only © 2024-2026 Sidakpreet Singh — see [LICENSE](LICENSE). Version 
 
 ---
 
-**Version:** v2.11.4
+**Version:** v2.11.5

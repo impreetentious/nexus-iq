@@ -1423,13 +1423,15 @@ function panelEditor(main, params, inst, catalog, touch) {
     // live cost-per-1k: ~800 in + 120 out tokens per call per juror
     const perUnit = payload.jurors.reduce((sum, j) => {
       const m = allModels.find((x) => x.id === j.model && x.provider === j.provider);
-      const inP = m?.pricing?.inUSDper1M ?? 1;
-      const outP = m?.pricing?.outUSDper1M ?? 4;
+      const inP = m?.pricing?.inUSDper1M ?? NaN;
+      const outP = m?.pricing?.outUSDper1M ?? NaN;
       return sum + (800 / 1e6) * inP + (120 / 1e6) * outP;
     }, 0);
-    costLine.textContent = payload.jurors.length
-      ? `cost as composed: ${fmtCost(perUnit * 1000)} per 1,000 units (${payload.jurors.length} jurors × ~800 in / 120 out tokens)`
-      : "add jurors to see the running cost per 1,000 units";
+    costLine.textContent = !Number.isFinite(perUnit)
+      ? "Pricing unavailable for one or more jurors; refresh the catalog or choose a priced model."
+      : payload.jurors.length
+        ? `cost as composed: ${fmtCost(perUnit * 1000)} per 1,000 units (${payload.jurors.length} jurors × ~800 in / 120 out tokens)`
+        : "add jurors to see the running cost per 1,000 units";
     const noParamData = payload.jurors.some((j) => {
       const e = modelpicker.findEntry(catalog, j.provider, j.model);
       return !e || !Array.isArray(e.params);
@@ -1486,6 +1488,12 @@ function certificateCard(cert, { reliabilityHref = null } = {}) {
     el("p", { class: "certificate__seal", aria: { hidden: "true" } }, "●"),
     kvList(
       kv("Frozen", fmtDateTime(cert.frozenAt)),
+      cert.coverage
+        ? kv(
+            "Comparable units",
+            `${cert.coverage.comparable} of ${cert.coverage.selected}; ${cert.coverage.missingSource} missing source, ${cert.coverage.missingOutput} missing output`,
+          )
+        : null,
       kv("Against gold", el("span", { class: "data" }, cert.goldsetId ?? "—")),
       kv(
         "Agreement",
@@ -2428,6 +2436,10 @@ function freezeSheet(params, inst, previewScope = null, construct = null) {
         } catch (err) {
           stop();
           paintFoot();
+          if (err.code === "INPUTS_CHANGED") {
+            freezeBtn.textContent = "Retry Current Inputs";
+            await refreshProject(params.slug).catch(() => {});
+          }
           toast.error("Freeze failed.", { detail: String(err.message ?? err) });
         }
       },
